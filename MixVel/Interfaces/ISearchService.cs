@@ -1,4 +1,4 @@
-﻿namespace MixVel
+﻿namespace MixVel.Interfaces
 {
     public interface ISearchService
     {
