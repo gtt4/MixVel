@@ -4,5 +4,9 @@
     {
         void Add(IEnumerable<Route> routes);
         IEnumerable<Route> Get(SearchRequest request);
+
+        void Invalidate();
+        DateTime EarliestTimeLimit { get; set; }
+
     }
 }

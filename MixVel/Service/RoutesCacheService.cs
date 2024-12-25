@@ -9,82 +9,10 @@ using Route = MixVel.Interfaces.Route;
 
 public class RoutesCacheService : IRoutesCacheService
 {
-    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-    private readonly Task _backgroundTask;
-    private readonly ConcurrentDictionary<Guid, Route> _routeCache;
-    private int _isInvalidating = 0; // 0 = false, 1 = true
-    private DateTime _earliestTimeLimit;
-
-    public RoutesCacheService()
-    {
-        _backgroundTask = Task.Run(InvalidatePeriodicallyAsync);
-    }
-
-    private async Task InvalidatePeriodicallyAsync()
-    {
-        try
-        {
-            while (!_cts.Token.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromHours(1), _cts.Token);
-                InvalidateIfNecessary();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // 
-        }
-    }
-
-    private void InvalidateIfNecessary()
-    {
-        // Check if already invalidating
-        if (Interlocked.Exchange(ref _isInvalidating, 1) == 1)
-            return;
-
-        try
-        {
-            var now = DateTime.UtcNow;
-
-            if (now >= _earliestTimeLimit)
-            {
-                Invalidate();
-            }
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _isInvalidating, 0);
-        }
-    }
-
-    private void Invalidate()
-    {
-        var now = DateTime.UtcNow;
-
-        foreach (var routeId in _routeCache.Keys)
-        {
-            if (_routeCache.TryGetValue(routeId, out var route) && route.TimeLimit <= now)
-            {
-                _routeCache.TryRemove(routeId, out _);
-            }
-        }
-
-        if (!_routeCache.IsEmpty)
-        {
-            _earliestTimeLimit = _routeCache.Values.Min(route => route.TimeLimit);
-        }
-        else
-        {
-            _earliestTimeLimit = DateTime.MaxValue;
-        }
-    }
-
-    public void Dispose()
-    {
-        _cts.Cancel();
-        _backgroundTask.Wait();
-        _cts.Dispose();
-    }
+    private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
+    private readonly ConcurrentDictionary<string, HashSet<Guid>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _earliestTimeLimitLock = new();
+    public DateTime EarliestTimeLimit { get; set; } = DateTime.MaxValue;
 
     public void Add(IEnumerable<Route> routes)
     {
@@ -96,9 +24,12 @@ public class RoutesCacheService : IRoutesCacheService
             {
                 _routeCache[route.Id] = route;
 
-                if (route.TimeLimit < _earliestTimeLimit)
+                UpdateEarliestTimeLimit(route.TimeLimit);
+
+                var originSet = _originIndex.GetOrAdd(route.Origin, _ => new HashSet<Guid>());
+                lock (originSet)
                 {
-                    _earliestTimeLimit = route.TimeLimit;
+                    originSet.Add(route.Id);
                 }
             }
         }
@@ -106,36 +37,113 @@ public class RoutesCacheService : IRoutesCacheService
 
     public IEnumerable<Route> Get(SearchRequest request)
     {
-        Invalidate();
-        var routes = _routeCache.Values.AsEnumerable();
+        var now = DateTime.UtcNow;
 
-        routes = routes.Where(route =>
-            string.Equals(route.Origin, request.Origin, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(route.Destination, request.Destination, StringComparison.OrdinalIgnoreCase) &&
-            route.OriginDateTime.Date == request.OriginDateTime.Date);
-
-        var filters = request.Filters;
-        if (filters != null)
+        if (!_originIndex.TryGetValue(request.Origin, out var originSet))
         {
-            if (filters.DestinationDateTime.HasValue)
-            {
-                routes = routes.Where(route =>
-                    route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
-            }
-
-            if (filters.MaxPrice.HasValue)
-            {
-                routes = routes.Where(route =>
-                    route.Price <= filters.MaxPrice.Value);
-            }
-
-            if (filters.MinTimeLimit.HasValue)
-            {
-                routes = routes.Where(route =>
-                    route.TimeLimit >= filters.MinTimeLimit.Value);
-            }
+            return Enumerable.Empty<Route>();
         }
+
+        IEnumerable<Guid> routeIds;
+        lock (originSet)
+        {
+            routeIds = originSet.ToList(); // TODO try to avoid 
+        }
+
+        var routes = routeIds
+            .Select(id => _routeCache.TryGetValue(id, out var route) ? route : null)
+            .Where(route => route != null && route.TimeLimit > now && route.OriginDateTime.Date == request.OriginDateTime.Date);
+
+        if (request.Filters != null)
+            routes = ApplyFilters(request.Filters, routes);
 
         return routes.ToList();
     }
+
+    private static IEnumerable<Route?> ApplyFilters(SearchFilters filters, IEnumerable<Route?> routes)
+    {
+
+        if (filters.DestinationDateTime.HasValue)
+        {
+            routes = routes.Where(route => route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
+        }
+
+        if (filters.MaxPrice.HasValue)
+        {
+            routes = routes.Where(route => route.Price <= filters.MaxPrice.Value);
+        }
+
+        if (filters.MinTimeLimit.HasValue)
+        {
+            routes = routes.Where(route => route.TimeLimit >= filters.MinTimeLimit.Value);
+        }
+
+
+        return routes;
+    }
+
+    public void Invalidate()
+    {
+        var now = DateTime.UtcNow;
+        var expiredRouteIds = new List<Guid>();
+
+        if (now < EarliestTimeLimit) return;
+
+        foreach (var kvp in _routeCache)
+        {
+            var route = kvp.Value;
+            if (route.TimeLimit <= now)
+            {
+                expiredRouteIds.Add(route.Id);
+            }
+        }
+
+        foreach (var routeId in expiredRouteIds)
+        {
+            if (!_routeCache.TryRemove(routeId, out var route))
+            {
+                continue;
+            }
+            if (_originIndex.TryGetValue(route.Origin, out var originSet))
+            {
+                lock (originSet)
+                {
+                    originSet.Remove(routeId);
+                    if (originSet.Count == 0)
+                    {
+                        _originIndex.TryRemove(route.Origin, out _);
+                    }
+                }
+            }
+        }
+
+        UpdateEarliestTimeLimit();
+    }
+
+    private void UpdateEarliestTimeLimit(DateTime newTimeLimit)
+    {
+        lock (_earliestTimeLimitLock)
+        {
+            if (newTimeLimit < EarliestTimeLimit)
+            {
+                EarliestTimeLimit = newTimeLimit;
+            }
+        }
+    }
+
+    private void UpdateEarliestTimeLimit()
+    {
+        lock (_earliestTimeLimitLock)
+        {
+            if (_routeCache.IsEmpty)
+            {
+                EarliestTimeLimit = DateTime.MaxValue;
+            }
+            else
+            {
+                EarliestTimeLimit = _routeCache.Values.Min(route => route.TimeLimit);
+            }
+        }
+    }
 }
+
