@@ -6,10 +6,12 @@ namespace MixVel.Service
     public class SearchService: ISearchService
     {
         List<IProvider> _providers;
-        
-        public SearchService(List<IProvider> providers) 
+        private readonly IRoutesCacheService _cacheService;
+
+        public SearchService(List<IProvider> providers, IRoutesCacheService cacheService) 
         {
             _providers = providers;
+            _cacheService = cacheService;
         }
 
         public Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
@@ -19,10 +21,19 @@ namespace MixVel.Service
 
         public async Task<SearchResponse> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
         {
+            if (request.Filters?.OnlyCached == true)
+            {
+                var routes = _cacheService.Get(request);
+                var aggregate = Aggregate(routes);
 
+                return MergeRouteAggregates([aggregate]);
+            }
+            
+            
             var tasks = _providers.Select(async client =>
             {
                 var routes = await GetRoutesFromProviderAsync(client, request, cancellationToken);
+                _cacheService.Add(routes);
                 var aggregate = Aggregate(routes);
                 return aggregate;
             });
