@@ -1,75 +1,141 @@
 ﻿using MixVel.Interfaces;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Route = MixVel.Interfaces.Route;
 
-namespace MixVel.Service
+public class RoutesCacheService : IRoutesCacheService
 {
-    public class RoutesCacheService : IRoutesCacheService
+    private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+    private readonly Task _backgroundTask;
+    private readonly ConcurrentDictionary<Guid, Route> _routeCache;
+    private int _isInvalidating = 0; // 0 = false, 1 = true
+    private DateTime _earliestTimeLimit;
+
+    public RoutesCacheService()
     {
-        private readonly ConcurrentDictionary<Guid, Route> _routeCache = new ConcurrentDictionary<Guid, Route>();
+        _backgroundTask = Task.Run(InvalidatePeriodicallyAsync);
+    }
 
-        public void Add(IEnumerable<Route> routes)
+    private async Task InvalidatePeriodicallyAsync()
+    {
+        try
         {
-            var now = DateTime.UtcNow; // TODO time kinds 
-
-            foreach (var route in routes)
+            while (!_cts.Token.IsCancellationRequested)
             {
-                if (route.TimeLimit > now)
-                {
-                    _routeCache[route.Id] = route;
-                }
+                await Task.Delay(TimeSpan.FromHours(1), _cts.Token);
+                InvalidateIfNecessary();
             }
         }
-
-        public IEnumerable<Route> Get(SearchRequest request)
+        catch (OperationCanceledException)
         {
-            Invalidate();
-            var routes = _routeCache.Values.AsEnumerable();
-
-            routes = routes.Where(route =>
-                string.Equals(route.Origin, request.Origin, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(route.Destination, request.Destination, StringComparison.OrdinalIgnoreCase) &&
-                route.OriginDateTime.Date == request.OriginDateTime.Date);
-
-            var filters = request.Filters;
-            if (filters != null)
-            {
-                if (filters.DestinationDateTime.HasValue)
-                {
-                    routes = routes.Where(route =>
-                        route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
-                }
-
-                if (filters.MaxPrice.HasValue)
-                {
-                    routes = routes.Where(route =>
-                        route.Price <= filters.MaxPrice.Value);
-                }
-
-                if (filters.MinTimeLimit.HasValue)
-                {
-                    routes = routes.Where(route =>
-                        route.TimeLimit >= filters.MinTimeLimit.Value);
-                }
-            }
-
-            return routes.ToList();
+            // 
         }
+    }
 
-        private void Invalidate()
+    private void InvalidateIfNecessary()
+    {
+        // Check if already invalidating
+        if (Interlocked.Exchange(ref _isInvalidating, 1) == 1)
+            return;
+
+        try
         {
             var now = DateTime.UtcNow;
 
-            foreach (var routeId in _routeCache.Keys)
+            if (now >= _earliestTimeLimit)
             {
-                if (_routeCache.TryGetValue(routeId, out var route))
+                Invalidate();
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isInvalidating, 0);
+        }
+    }
+
+    private void Invalidate()
+    {
+        var now = DateTime.UtcNow;
+
+        foreach (var routeId in _routeCache.Keys)
+        {
+            if (_routeCache.TryGetValue(routeId, out var route) && route.TimeLimit <= now)
+            {
+                _routeCache.TryRemove(routeId, out _);
+            }
+        }
+
+        if (!_routeCache.IsEmpty)
+        {
+            _earliestTimeLimit = _routeCache.Values.Min(route => route.TimeLimit);
+        }
+        else
+        {
+            _earliestTimeLimit = DateTime.MaxValue;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _backgroundTask.Wait();
+        _cts.Dispose();
+    }
+
+    public void Add(IEnumerable<Route> routes)
+    {
+        var now = DateTime.UtcNow;
+
+        foreach (var route in routes)
+        {
+            if (route.TimeLimit > now)
+            {
+                _routeCache[route.Id] = route;
+
+                if (route.TimeLimit < _earliestTimeLimit)
                 {
-                    if (route.TimeLimit <= now)
-                    {
-                        _routeCache.TryRemove(routeId, out _);
-                    }
+                    _earliestTimeLimit = route.TimeLimit;
                 }
             }
         }
+    }
+
+    public IEnumerable<Route> Get(SearchRequest request)
+    {
+        Invalidate();
+        var routes = _routeCache.Values.AsEnumerable();
+
+        routes = routes.Where(route =>
+            string.Equals(route.Origin, request.Origin, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(route.Destination, request.Destination, StringComparison.OrdinalIgnoreCase) &&
+            route.OriginDateTime.Date == request.OriginDateTime.Date);
+
+        var filters = request.Filters;
+        if (filters != null)
+        {
+            if (filters.DestinationDateTime.HasValue)
+            {
+                routes = routes.Where(route =>
+                    route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
+            }
+
+            if (filters.MaxPrice.HasValue)
+            {
+                routes = routes.Where(route =>
+                    route.Price <= filters.MaxPrice.Value);
+            }
+
+            if (filters.MinTimeLimit.HasValue)
+            {
+                routes = routes.Where(route =>
+                    route.TimeLimit >= filters.MinTimeLimit.Value);
+            }
+        }
+
+        return routes.ToList();
     }
 }

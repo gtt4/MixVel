@@ -78,8 +78,8 @@ namespace Tests
             var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(_providerOneClientMock.Object, new ProviderOneConverter());
 
 
-
-            var service = new SearchService(new List<IProvider>() {providerOne, providerTwo});
+            IRoutesCacheService cache = new RoutesCacheService();
+            var service = new SearchService(new List<IProvider>() {providerOne, providerTwo}, cache);
             var result = await service.SearchAsync(searchRequest, new CancellationToken());
 
 
