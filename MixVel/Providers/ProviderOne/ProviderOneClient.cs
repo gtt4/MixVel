@@ -1,19 +1,20 @@
 ﻿using MixVel.Interfaces;
+using MixVel.Settings;
 using Polly;
-using TestTask;
 
-namespace MixVel.Providers
+namespace MixVel.Providers.ProviderOne
 {
     public class ProviderOneClient : IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>
     {
         private readonly HttpClient _httpClient;
         private readonly AsyncPolicy<HttpResponseMessage> _policy;
 
-        private const string ProviderOnePingUrl = "http://provider-one/api/v1/ping";
-        private const string ProviderOneSearchUrl = "http://provider-one/api/v1/search";
- 
-        public ProviderOneClient(HttpClient httpClient)
+        private readonly string ProviderBaseUri;
+
+        public ProviderOneClient(HttpClient httpClient, IProviderUriResolver providerUriResolver)
         {
+            ProviderBaseUri = providerUriResolver.GetProviderUri("ProviderOne");
+
             _httpClient = httpClient;
             _policy = Policy.WrapAsync(
                 Policy<HttpResponseMessage>
@@ -29,7 +30,7 @@ namespace MixVel.Providers
             try
             {
                 var response = await _policy.ExecuteAsync(
-                    ct => _httpClient.GetAsync(ProviderOnePingUrl, ct),
+                    ct => _httpClient.GetAsync($"{ProviderBaseUri}/ping", ct),
                     cancellationToken
                 );
                 return response.IsSuccessStatusCode;
@@ -43,7 +44,7 @@ namespace MixVel.Providers
         public async Task<ProviderOneSearchResponse> SearchAsync(ProviderOneSearchRequest request, CancellationToken cancellationToken)
         {
             var response = await _policy.ExecuteAsync(
-                ct => _httpClient.PostAsJsonAsync(ProviderOneSearchUrl, request, ct),
+                ct => _httpClient.PostAsJsonAsync($"{ProviderBaseUri}/search", request, ct),
                 cancellationToken
             );
 

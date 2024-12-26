@@ -1,9 +1,8 @@
 ﻿using MixVel.Interfaces;
 using System;
-using TestTask;
 using Route = MixVel.Interfaces.Route;
 
-namespace MixVel.Providers
+namespace MixVel.Providers.ProviderTwo
 {
     public class ProviderTwoConverter : IConverter<ProviderTwoSearchRequest, ProviderTwoSearchResponse, ProviderTwoRoute>
     {
@@ -16,8 +15,9 @@ namespace MixVel.Providers
                 MinTimeLimit = request.Filters?.MinTimeLimit
             };
 
-        public Route ConvertRoute(ProviderTwoRoute route) => new ()
+        public Route ConvertRoute(ProviderTwoRoute route) => new()
         {
+            Id = Guid.NewGuid(),
             Origin = route.Departure.Point,
             Destination = route.Arrival.Point,
             OriginDateTime = route.Departure.Date,

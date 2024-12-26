@@ -1,17 +1,19 @@
 ﻿using MixVel.Interfaces;
 
-namespace MixVel.Service
+namespace MixVel.Cache
 {
     public class InvalidationScheduler : IDisposable
     {
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _backgroundTask;
+        private readonly ILogger<InvalidationScheduler> _logger;
         private readonly IRoutesCacheService _cache;
 
-        public InvalidationScheduler(IRoutesCacheService cache)
+        public InvalidationScheduler(IRoutesCacheService cache, ILogger<InvalidationScheduler> logger)
         {
             _cache = cache;
             _backgroundTask = Task.Run(InvalidatePeriodicallyAsync);
+            _logger = logger;
         }
 
         private async Task InvalidatePeriodicallyAsync()
@@ -22,6 +24,7 @@ namespace MixVel.Service
                 {
                     InvalidateIfNecessary();
                     var delay = ComputeDelay();
+                    _logger.LogInformation($"invalidation delay = {delay.TotalMinutes}");
                     await Task.Delay(delay, _cts.Token);
                 }
             }
@@ -36,15 +39,12 @@ namespace MixVel.Service
             var now = DateTime.UtcNow;
             var earliestTimeLimit = _cache.EarliestTimeLimit;
 
-            if (earliestTimeLimit == DateTime.MaxValue || earliestTimeLimit <= now)
-            {
-                return TimeSpan.FromMinutes(1); // Default delay
-            }
-            else
-            {
-                var delay = earliestTimeLimit - now;
-                return delay < TimeSpan.FromSeconds(5) ? TimeSpan.FromSeconds(5) : delay;
-            }
+            var delay = earliestTimeLimit <= now
+                ? TimeSpan.FromMinutes(1) // Default delay
+                : earliestTimeLimit - now;
+
+            return TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 5, 50));
+
         }
 
         private void InvalidateIfNecessary()

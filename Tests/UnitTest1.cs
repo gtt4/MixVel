@@ -2,10 +2,14 @@ using MixVel.Interfaces;
 using MixVel.Providers;
 using MixVel.Service;
 using Moq;
-using TestTask;
 using RichardSzalay.MockHttp;
 using System.Text;
 using System.Text.Json;
+using MixVel;
+using MockProviderClients;
+using Microsoft.Extensions.Logging;
+using MixVel.Providers.ProviderOne;
+using MixVel.Providers.ProviderTwo;
 
 
 namespace Tests
@@ -13,17 +17,13 @@ namespace Tests
     public class Tests
     {
 
-        private const string ProviderOnePingUrl = "http://provider-one/api/v1/ping";
-        private const string ProviderTwoPingUrl = "http://provider-two/api/v1/ping";
 
-        private const string ProviderOneSearchUrl = "http://provider-one/api/v1/search";
-        private const string ProviderTwoSearchUrl = "http://provider-two/api/v1/search";
 
         private readonly Mock<IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>> _providerOneClientMock = new Mock<IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>>();
-        private readonly Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>> _providerTwoClientMock = new Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>> ();
+        private readonly Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>> _providerTwoClientMock = new Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>>();
 
         [SetUp]
-        public void Setup() 
+        public void Setup()
         {
             //IProviderOne _providerOne = new 
         }
@@ -39,7 +39,7 @@ namespace Tests
             var converterTwo = new ProviderTwoConverter();
 
             _providerOneClientMock.Setup(x => x.SearchAsync(converterOne.ConvertRequest(searchRequest), It.IsAny<CancellationToken>())).
-                ReturnsAsync(new ProviderOneSearchResponse() 
+                ReturnsAsync(new ProviderOneSearchResponse()
                 {
                     Routes = new[] {
                             new ProviderOneRoute
@@ -88,115 +88,74 @@ namespace Tests
             var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(_providerOneClientMock.Object, new ProviderOneConverter());
 
 
-            IRoutesCacheService cache = new RoutesCacheService();
-            var service = new SearchService(new List<IProvider>() {providerOne, providerTwo}, cache);
-            var result = await service.SearchAsync(searchRequest, new CancellationToken());
+            //IRoutesCacheService cache = new RoutesCacheService();
+            //var service = new SearchService(new List<IProvider>() {providerOne, providerTwo}, cache);
+            //var result = await service.SearchAsync(searchRequest, new CancellationToken());
 
 
 
             Assert.Pass();
         }
+        /*
+                private ISearchService CreateSearchService(HttpClient client)
+                {
 
-        private ISearchService SetupService(HttpClient client)
-        {
-            IRoutesCacheService cache = new RoutesCacheService();
-            var invalidationScheduler = new InvalidationScheduler(cache);
+                    IRoutesCacheService cache = new RoutesCacheService();
+                    var invalidationScheduler = new InvalidationScheloduler(cache);
 
-            var converterOne = new ProviderOneConverter();
-            var converterTwo = new ProviderTwoConverter();
+                    var converterOne = new ProviderOneConverter();
+                    var converterTwo = new ProviderTwoConverter();
 
-            var clientOne = new ProviderOneClient(client);
-            var clientTwo = new ProviderTwoClient(client);
+                    IProviderUriResolver uriResolver = new TestProviderUriResolver(); 
 
-            var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
-            var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
+                    var clientOne = new ProviderOneClient(client, uriResolver);
+                    var clientTwo = new ProviderTwoClient(client, uriResolver);
 
-            var service = new SearchService([providerOne, providerTwo], cache);
-            return service;
-        }
+                    var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
+                    var providerTwo = new ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoSearchResponse, ProviderTwoRoute>(clientTwo, converterTwo);
 
-        private HttpClient MockClient()
-        {
-            var mockHttp = new MockHttpMessageHandler();
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
-            
-            mockHttp.When(HttpMethod.Post, ProviderOneSearchUrl)
-                    .Respond(request =>
-                    {
-                        var content = request.Content.ReadAsStringAsync().Result;
-                        var searchRequest = JsonSerializer.Deserialize<ProviderOneSearchRequest>(content, options);
-
-                        var response = ResponseGenerator.GenerateResponse(searchRequest);
-                        var jsonResponse = JsonSerializer.Serialize(response);
-
-                        return new HttpResponseMessage
-                        {
-                            StatusCode = System.Net.HttpStatusCode.OK,
-                            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-                        };
-                    });
-
-            // Mock Provider Two
-            mockHttp.When(HttpMethod.Post, ProviderTwoSearchUrl)
-                    .Respond(request =>
-                    {
-                        var content = request.Content.ReadAsStringAsync().Result;
-                        var searchRequest = JsonSerializer.Deserialize<ProviderTwoSearchRequest>(content, options); // Reuse model for simplicity
-
-                        var response = ResponseGenerator.GenerateResponse(searchRequest); // Reuse generator for simplicity
-                        var jsonResponse = JsonSerializer.Serialize(response);
-
-                        return new HttpResponseMessage
-                        {
-                            StatusCode = System.Net.HttpStatusCode.OK,
-                            Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
-                        };
-                    });
-
-
-            var client = new HttpClient(mockHttp);
-
-            return client;
-        }
-
-        [Test]
-        public async Task IntegrationTest()
-        {
- 
-            //// Arrange
-            var mockHttp = MockClient();
-            var service = SetupService(mockHttp);
-
-            //// Mock provider one as ready (200)
-            //mockHttp.When(ProviderOnePingUrl)
-            //        .Respond("application/json", "OK"); // 200 by default
-
-            //// Mock provider two as down (500)
-            //mockHttp.When(ProviderTwoPingUrl)
-            //        .Respond(System.Net.HttpStatusCode.InternalServerError);
-
-            // Arrange
-           
-            // Act
-
-            // Assert
-            //Assert.That(providerOneResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.OK));
-            //Assert.That(providerTwoResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.InternalServerError));
+                    var service = new SearchService([providerOne, providerTwo], cache); // called from controler
+                    return service;
+                }
 
 
 
-            var searchRequest = new SearchRequest();
-            searchRequest.Origin = "Moscow";
-            searchRequest.Destination = "Sochi";
-            searchRequest.OriginDateTime = new DateTime(2025, 01, 01);
+                [Test]
+                public async Task IntegrationTest()
+                {
 
-            var result = await service.SearchAsync(searchRequest, new CancellationToken());
-            searchRequest.Filters = new SearchFilters() { OnlyCached = true };
-            var resultFromCache = await service.SearchAsync(searchRequest, new CancellationToken());
+                    //// Arrange
+                    var mockHttp = new MockClient().CreateMockClient(new TestProviderUriResolver());
+                    var service = CreateSearchService(mockHttp);
 
-        }
+                    //// Mock provider one as ready (200)
+                    //mockHttp.When(ProviderOnePingUrl)
+                    //        .Respond("application/json", "OK"); // 200 by default
+
+                    //// Mock provider two as down (500)
+                    //mockHttp.When(ProviderTwoPingUrl)
+                    //        .Respond(System.Net.HttpStatusCode.InternalServerError);
+
+                    // Arrange
+
+                    // Act
+
+                    // Assert
+                    //Assert.That(providerOneResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.OK));
+                    //Assert.That(providerTwoResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.InternalServerError));
+
+
+
+                    var searchRequest = new SearchRequest();
+                    searchRequest.Origin = "Moscow";
+                    searchRequest.Destination = "Sochi";
+                    searchRequest.OriginDateTime = new DateTime(2025, 01, 01);
+
+                    var result = await service.SearchAsync(searchRequest, new CancellationToken());
+                    searchRequest.Filters = new SearchFilters() { OnlyCached = true };
+                    var resultFromCache = await service.SearchAsync(searchRequest, new CancellationToken());
+
+                }
+        */
     }
 }

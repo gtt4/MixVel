@@ -1,8 +1,7 @@
 ﻿using MixVel.Interfaces;
-using TestTask;
 using Route = MixVel.Interfaces.Route;
 
-namespace MixVel.Providers
+namespace MixVel.Providers.ProviderOne
 {
     public class ProviderOneConverter : IConverter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>
     {
@@ -18,6 +17,7 @@ namespace MixVel.Providers
 
         public Route ConvertRoute(ProviderOneRoute route) => new()
         {
+            Id = Guid.NewGuid(),
             Destination = route.To,
             Origin = route.From,
             DestinationDateTime = route.DateTo,
@@ -28,7 +28,8 @@ namespace MixVel.Providers
 
         public IEnumerable<Route> ConvertRoutes(ProviderOneSearchResponse? response)
         {
-            foreach (var route in response.Routes) {
+            foreach (var route in response.Routes)
+            {
                 yield return ConvertRoute(route);
             }
         }

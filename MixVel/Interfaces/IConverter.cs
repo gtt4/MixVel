@@ -1,5 +1,4 @@
-﻿using TestTask;
-
+﻿
 namespace MixVel.Interfaces
 {
     public interface IConverter<ProviderRequest, ProviderResponse, ProviderRoute>

@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MixVel\MixVel.csproj" />
+    <ProjectReference Include="..\MockProviderClients\MockProviderClients.csproj" />
   </ItemGroup>
 
   <ItemGroup>

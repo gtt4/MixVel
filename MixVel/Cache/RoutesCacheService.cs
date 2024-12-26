@@ -7,7 +7,15 @@ public class RoutesCacheService : IRoutesCacheService
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
     private readonly ConcurrentDictionary<string, HashSet<Guid>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _earliestTimeLimitLock = new();
+    private readonly ILogger<RoutesCacheService> _logger;
+
     public DateTime EarliestTimeLimit { get; set; } = DateTime.MaxValue;
+
+
+    public RoutesCacheService(ILogger<RoutesCacheService> logger)
+    {
+            _logger = logger;
+    }
 
     public void Add(IEnumerable<Route> routes)
     {
@@ -17,7 +25,7 @@ public class RoutesCacheService : IRoutesCacheService
         {
             if (route.TimeLimit > now)
             {
-                route.Id = Guid.NewGuid();
+                //route.Id = Guid.NewGuid();
                 _routeCache[route.Id] = route;
 
                 UpdateEarliestTimeLimit(route.TimeLimit);
@@ -48,7 +56,7 @@ public class RoutesCacheService : IRoutesCacheService
 
         var routes = routeIds
             .Select(id => _routeCache.TryGetValue(id, out var route) ? route : null)
-            .Where(route => route != null && route.TimeLimit > now && route.OriginDateTime.Date == request.OriginDateTime.Date);
+            .Where(route => route != null && route.TimeLimit > now);
 
         if (request.Filters != null)
             routes = ApplyFilters(request.Filters, routes);
@@ -59,20 +67,20 @@ public class RoutesCacheService : IRoutesCacheService
     private static IEnumerable<Route?> ApplyFilters(SearchFilters filters, IEnumerable<Route?> routes)
     {
 
-        if (filters.DestinationDateTime.HasValue)
-        {
-            routes = routes.Where(route => route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
-        }
+        //if (filters.DestinationDateTime.HasValue)
+        //{
+        //    routes = routes.Where(route => route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
+        //}
 
         if (filters.MaxPrice.HasValue)
         {
             routes = routes.Where(route => route.Price <= filters.MaxPrice.Value);
         }
 
-        if (filters.MinTimeLimit.HasValue)
-        {
-            routes = routes.Where(route => route.TimeLimit >= filters.MinTimeLimit.Value);
-        }
+        //if (filters.MinTimeLimit.HasValue)
+        //{
+        //    routes = routes.Where(route => route.TimeLimit >= filters.MinTimeLimit.Value);
+        //}
 
 
         return routes;
@@ -83,7 +91,9 @@ public class RoutesCacheService : IRoutesCacheService
         var now = DateTime.UtcNow;
         var expiredRouteIds = new List<Guid>();
 
-        if (now < EarliestTimeLimit) return;
+        if (now < EarliestTimeLimit) {
+            _logger.LogInformation("Nothing to remove less them earliest");
+            return; };
 
         foreach (var kvp in _routeCache)
         {
@@ -100,6 +110,8 @@ public class RoutesCacheService : IRoutesCacheService
             {
                 continue;
             }
+
+            _logger.LogInformation($"Remove{route.TimeLimit} at {DateTime.UtcNow}");
             if (_originIndex.TryGetValue(route.Origin, out var originSet))
             {
                 lock (originSet)

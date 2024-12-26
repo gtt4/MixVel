@@ -1,4 +1,5 @@
-﻿using TestTask;
+﻿using MixVel.Providers.ProviderOne;
+using MixVel.Providers.ProviderTwo;
 
 namespace MixVel.Interfaces
 {

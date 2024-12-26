@@ -1,6 +1,7 @@
 using MixVel.Interfaces;
+using MixVel.Providers.ProviderTwo;
+using MixVel.Settings;
 using Polly;
-using TestTask;
 
 public class ProviderTwoClient : IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>
 {
@@ -8,11 +9,13 @@ public class ProviderTwoClient : IProviderClient<ProviderTwoSearchRequest, Provi
     private readonly AsyncPolicy<HttpResponseMessage> _policy;
 
 
-    private const string ProviderTwoSearchUrl = "http://provider-two/api/v1/search";
-    private const string ProviderTwoPingUrl = "http://provider-two/api/v1/ping";
+    private readonly string ProviderBaseUri;
 
-    public ProviderTwoClient(HttpClient httpClient)
+
+    public ProviderTwoClient(HttpClient httpClient, IProviderUriResolver providerUriResolver)
     {
+        ProviderBaseUri = providerUriResolver.GetProviderUri("ProviderTwo");
+
         _httpClient = httpClient;
         _policy = Policy.WrapAsync(
             Policy<HttpResponseMessage>
@@ -28,7 +31,7 @@ public class ProviderTwoClient : IProviderClient<ProviderTwoSearchRequest, Provi
         try
         {
             var response = await _policy.ExecuteAsync(
-                ct => _httpClient.GetAsync(ProviderTwoPingUrl, ct),
+                ct => _httpClient.GetAsync($"{ProviderBaseUri}/ping", ct),
                 cancellationToken
             );
             return response.IsSuccessStatusCode;
@@ -42,7 +45,7 @@ public class ProviderTwoClient : IProviderClient<ProviderTwoSearchRequest, Provi
     public async Task<ProviderTwoSearchResponse> SearchAsync(ProviderTwoSearchRequest request, CancellationToken cancellationToken)
     {
         var response = await _policy.ExecuteAsync(
-            ct => _httpClient.PostAsJsonAsync(ProviderTwoSearchUrl, request, ct),
+            ct => _httpClient.PostAsJsonAsync($"{ProviderBaseUri}/search", request, ct),
             cancellationToken
         );
 
