@@ -1,5 +1,4 @@
 ﻿using AutoMapper;
-using Microsoft.Extensions.DependencyInjection;
 using MixVel.Cache;
 using MixVel.Interfaces;
 using MixVel.Providers;
@@ -16,8 +15,8 @@ namespace MixVel.Service
             services.AddSingleton<IRoutesCacheService, RoutesCacheService>();
             services.AddSingleton<InvalidationScheduler>();
 
-            // Determine whether to use mock clients
-            //bool useMockClients = configuration.GetValue<bool>("UseMockClients");
+            
+            bool useMockClients = configuration.GetValue<bool>("UseMockClients");
 
             services.AddSingleton<ISearchService>(provider =>
             {
@@ -31,7 +30,7 @@ namespace MixVel.Service
                 HttpClient httpClientOne;
                 HttpClient httpClientTwo;
 
-                if (true)
+                if (useMockClients)
                 {
 
                     httpClientOne = new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>());

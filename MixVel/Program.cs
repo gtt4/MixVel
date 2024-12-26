@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Configuration;
-using MixVel.Providers.ProviderOne;
-using MixVel.Providers.ProviderTwo;
+using Prometheus.HttpClientMetrics;
 using MixVel.Service;
 using MixVel.Settings;
 
@@ -34,5 +32,7 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
+
+
 
 app.Run();

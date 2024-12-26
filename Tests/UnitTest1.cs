@@ -17,8 +17,6 @@
 //    public class Tests
 //    {
 
-
-
 //        private readonly Mock<IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>> _providerOneClientMock = new Mock<IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>>();
 //        private readonly Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>> _providerTwoClientMock = new Mock<IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>>();
 
@@ -85,7 +83,7 @@
 //    });
 
 //            var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(_providerOneClientMock.Object, null);
-//            var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(_providerOneClientMock.Object, null);
+//            var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(_providerOneClientMock.Object, );
 
 
 //            //IRoutesCacheService cache = new RoutesCacheService();
@@ -96,7 +94,7 @@
 
 //            Assert.Pass();
 //        }
-//        /*
+        
 //                private ISearchService CreateSearchService(HttpClient client)
 //                {
 
@@ -156,6 +154,6 @@
 //                    var resultFromCache = await service.SearchAsync(searchRequest, new CancellationToken());
 
 //                }
-//        */
+        
 //    }
 //}

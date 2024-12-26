@@ -27,7 +27,6 @@ public class RoutesCacheService : IRoutesCacheService
         {
             if (route.TimeLimit > now)
             {
-                //route.Id = Guid.NewGuid();
                 _routeCache[route.Id] = route;
 
                 UpdateEarliestTimeLimit(route.TimeLimit);
@@ -60,10 +59,7 @@ public class RoutesCacheService : IRoutesCacheService
             .Select(id => _routeCache.TryGetValue(id, out var route) ? route : null)
             .Where(route => route != null && route.TimeLimit > now);
 
-        if (request.Filters != null)
-            routes = _searchFilter.ApplyFilters(request.Filters, routes);
-
-        return routes.ToList();
+        return _searchFilter.ApplyFilters(request.Filters, routes);
     }
 
 
@@ -75,7 +71,6 @@ public class RoutesCacheService : IRoutesCacheService
 
         if (now < EarliestTimeLimit)
         {
-            _logger.LogInformation("Nothing to remove less them earliest");
             return;
         };
 

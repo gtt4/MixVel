@@ -44,6 +44,7 @@ public class MockClient
         string uri,
         Func<TRequest, TResponse> responseGenerator)
     {
+        var rand = new Random();
         mockHttp.When(method, uri)
                 .Respond(async request =>
                 {
@@ -52,6 +53,8 @@ public class MockClient
                     var responseObject = responseGenerator(requestObject);
 
                     var jsonResponse = JsonSerializer.Serialize(responseObject, _serializerOptions);
+
+                    await Task.Delay(rand.Next(1,3000));
                     return new HttpResponseMessage
                     {
                         StatusCode = System.Net.HttpStatusCode.OK,
