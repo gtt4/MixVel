@@ -97,34 +97,32 @@ namespace Tests
             Assert.Pass();
         }
 
-        [Test]
-        public async Task IntegrationTest()
+        private ISearchService SetupService(HttpClient client)
         {
             IRoutesCacheService cache = new RoutesCacheService();
-            //var invalidationScheduler = new InvalidationScheduler(cache);
+            var invalidationScheduler = new InvalidationScheduler(cache);
 
             var converterOne = new ProviderOneConverter();
             var converterTwo = new ProviderTwoConverter();
 
+            var clientOne = new ProviderOneClient(client);
+            var clientTwo = new ProviderTwoClient(client);
 
-            //// Arrange
-            //var mockHttp = new MockHttpMessageHandler();
+            var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
+            var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
 
-            //// Mock provider one as ready (200)
-            //mockHttp.When(ProviderOnePingUrl)
-            //        .Respond("application/json", "OK"); // 200 by default
+            var service = new SearchService([providerOne, providerTwo], cache);
+            return service;
+        }
 
-            //// Mock provider two as down (500)
-            //mockHttp.When(ProviderTwoPingUrl)
-            //        .Respond(System.Net.HttpStatusCode.InternalServerError);
-
-            // Arrange
+        private HttpClient MockClient()
+        {
             var mockHttp = new MockHttpMessageHandler();
             var options = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true // Enables case-insensitive matching
+                PropertyNameCaseInsensitive = true
             };
-            // Mock Provider One
+            
             mockHttp.When(HttpMethod.Post, ProviderOneSearchUrl)
                     .Respond(request =>
                     {
@@ -161,6 +159,27 @@ namespace Tests
 
             var client = new HttpClient(mockHttp);
 
+            return client;
+        }
+
+        [Test]
+        public async Task IntegrationTest()
+        {
+ 
+            //// Arrange
+            var mockHttp = MockClient();
+            var service = SetupService(mockHttp);
+
+            //// Mock provider one as ready (200)
+            //mockHttp.When(ProviderOnePingUrl)
+            //        .Respond("application/json", "OK"); // 200 by default
+
+            //// Mock provider two as down (500)
+            //mockHttp.When(ProviderTwoPingUrl)
+            //        .Respond(System.Net.HttpStatusCode.InternalServerError);
+
+            // Arrange
+           
             // Act
 
             // Assert
@@ -168,13 +187,6 @@ namespace Tests
             //Assert.That(providerTwoResponse.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.InternalServerError));
 
 
-            var clientOne = new ProviderOneClient(mockHttp.ToHttpClient());
-            var clientTwo = new ProviderTwoClient(mockHttp.ToHttpClient());
-
-            var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
-            var providerTwo = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(clientOne, converterOne);
-
-            var service = new SearchService([providerOne, providerTwo], cache);
 
             var searchRequest = new SearchRequest();
             searchRequest.Origin = "Moscow";
@@ -184,10 +196,6 @@ namespace Tests
             var result = await service.SearchAsync(searchRequest, new CancellationToken());
             searchRequest.Filters = new SearchFilters() { OnlyCached = true };
             var resultFromCache = await service.SearchAsync(searchRequest, new CancellationToken());
-
-
-
-
 
         }
     }
