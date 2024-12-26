@@ -1,10 +1,5 @@
 ﻿using MixVel.Interfaces;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Route = MixVel.Interfaces.Route;
 
 public class RoutesCacheService : IRoutesCacheService
@@ -22,6 +17,7 @@ public class RoutesCacheService : IRoutesCacheService
         {
             if (route.TimeLimit > now)
             {
+                route.Id = Guid.NewGuid();
                 _routeCache[route.Id] = route;
 
                 UpdateEarliestTimeLimit(route.TimeLimit);

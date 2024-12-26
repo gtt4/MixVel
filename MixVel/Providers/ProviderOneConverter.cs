@@ -18,10 +18,10 @@ namespace MixVel.Providers
 
         public Route ConvertRoute(ProviderOneRoute route) => new()
         {
-            Destination = route.From,
-            Origin = route.To,
-            DestinationDateTime = route.DateFrom,
-            OriginDateTime = route.DateTo,
+            Destination = route.To,
+            Origin = route.From,
+            DestinationDateTime = route.DateTo,
+            OriginDateTime = route.DateFrom,
             Price = route.Price,
             TimeLimit = route.TimeLimit
         };

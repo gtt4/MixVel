@@ -9,6 +9,9 @@ namespace MixVel.Providers
         private readonly HttpClient _httpClient;
         private readonly AsyncPolicy<HttpResponseMessage> _policy;
 
+        private const string ProviderOnePingUrl = "http://provider-one/api/v1/ping";
+        private const string ProviderOneSearchUrl = "http://provider-one/api/v1/search";
+ 
         public ProviderOneClient(HttpClient httpClient)
         {
             _httpClient = httpClient;
@@ -26,7 +29,7 @@ namespace MixVel.Providers
             try
             {
                 var response = await _policy.ExecuteAsync(
-                    ct => _httpClient.GetAsync("ping", ct),
+                    ct => _httpClient.GetAsync(ProviderOnePingUrl, ct),
                     cancellationToken
                 );
                 return response.IsSuccessStatusCode;
@@ -40,7 +43,7 @@ namespace MixVel.Providers
         public async Task<ProviderOneSearchResponse> SearchAsync(ProviderOneSearchRequest request, CancellationToken cancellationToken)
         {
             var response = await _policy.ExecuteAsync(
-                ct => _httpClient.PostAsJsonAsync("search", request, ct),
+                ct => _httpClient.PostAsJsonAsync(ProviderOneSearchUrl, request, ct),
                 cancellationToken
             );
 

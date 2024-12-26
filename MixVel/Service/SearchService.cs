@@ -54,6 +54,7 @@ namespace MixVel.Service
 
         private RoutesAggregate Aggregate(IEnumerable<Route> routes)
         {
+            if (!routes.Any()) return new RoutesAggregate();
             var first = routes.FirstOrDefault();
             var minPrice = first.Price;
             var minTime = first.DestinationDateTime - first.OriginDateTime;

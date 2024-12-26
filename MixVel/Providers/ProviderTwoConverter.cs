@@ -16,12 +16,12 @@ namespace MixVel.Providers
                 MinTimeLimit = request.Filters?.MinTimeLimit
             };
 
-        public Interfaces.Route ConvertRoute(ProviderTwoRoute route) => new ()
+        public Route ConvertRoute(ProviderTwoRoute route) => new ()
         {
             Origin = route.Departure.Point,
-            Destination = route.Departure.Point,
+            Destination = route.Arrival.Point,
             OriginDateTime = route.Departure.Date,
-            DestinationDateTime = route.Departure.Date,
+            DestinationDateTime = route.Arrival.Date,
             Price = route.Price,
             TimeLimit = route.TimeLimit
         };
