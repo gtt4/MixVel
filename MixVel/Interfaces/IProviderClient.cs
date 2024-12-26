@@ -3,17 +3,17 @@ using MixVel.Providers.ProviderTwo;
 
 namespace MixVel.Interfaces
 {
-    public interface IProviderClient<Request, Response>
+    public interface IProviderClient<Request, Route>
     {
         Task<bool> IsAvailableAsync(CancellationToken cancellationToken);
-        Task<Response> SearchAsync(Request request, CancellationToken cancellationToken);
+        Task<Route[]> SearchAsync(Request request, CancellationToken cancellationToken);
     }
 
-    public interface IProviderOne: IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>
-    {
-    }
+    //public interface IProviderOne: IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>
+    //{
+    //}
 
-    public interface IProviderTwo: IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>
-    {
-    }
+    //public interface IProviderTwo: IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>
+    //{
+    //}
 }

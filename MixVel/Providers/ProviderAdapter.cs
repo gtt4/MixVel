@@ -1,20 +1,20 @@
-﻿using Microsoft.AspNetCore.Routing;
+﻿using AutoMapper;
 using MixVel.Interfaces;
-using System;
 using Route = MixVel.Interfaces.Route;
 
 namespace MixVel.Providers
 {
-    public class ProviderAdapter<ProviderRequest, ProviderResponse, ProviderRoute> : IProvider
+    public class ProviderAdapter<ProviderRequest, ProviderRoute> : IProvider
     {
-        readonly IProviderClient<ProviderRequest, ProviderResponse> _client;
-        readonly IConverter<ProviderRequest, ProviderResponse, ProviderRoute> _converter;
+        private readonly IProviderClient<ProviderRequest, ProviderRoute> _client;
+        private readonly IMapper _mapper;
 
-        public ProviderAdapter(IProviderClient<ProviderRequest, ProviderResponse> client, 
-            IConverter<ProviderRequest, ProviderResponse, ProviderRoute> converter)
+        public ProviderAdapter(
+            IProviderClient<ProviderRequest, ProviderRoute> client,
+            IMapper mapper)
         {
             _client = client;
-            _converter = converter;
+            _mapper = mapper;
         }
 
         public Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
@@ -24,18 +24,12 @@ namespace MixVel.Providers
 
         public async Task<IEnumerable<Route>> SearchAsync(SearchRequest request, CancellationToken cancellationToken)
         {
-            var providerRequest = _converter.ConvertRequest(request);
+            var providerRequest = _mapper.Map<ProviderRequest>(request);
 
-            var response = await _client.SearchAsync(providerRequest, cancellationToken);
+            var routes = await _client.SearchAsync(providerRequest, cancellationToken);
 
-            var result = new List<Route>();
-            //foreach (var route in response.Routes)
-            //{
-            //    result.Add(_converter.ConvertRoute(route));
-            //}
-
-            return _converter.ConvertRoutes(response);
-            //return result;
+            return _mapper.Map<IEnumerable<Route>>(routes);
         }
     }
+
 }

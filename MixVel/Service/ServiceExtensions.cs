@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using AutoMapper;
+using Microsoft.Extensions.DependencyInjection;
 using MixVel.Cache;
 using MixVel.Interfaces;
 using MixVel.Providers;
@@ -47,14 +48,18 @@ namespace MixVel.Service
                 var clientOne = new ProviderOneClient(httpClientOne, uriResolver);
                 var clientTwo = new ProviderTwoClient(httpClientTwo, uriResolver);
 
-                var converterOne = new ProviderOneConverter();
-                var converterTwo = new ProviderTwoConverter();
+                var configuration = new MapperConfiguration(cfg =>
+                {
+                    cfg.AddProfile<ProviderOneMappingProfile>();
+                    cfg.AddProfile<ProviderTwoMappingProfile>();
+                });
+                var mapper = configuration.CreateMapper();
 
-                var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneSearchResponse, ProviderOneRoute>(
-                    clientOne, converterOne);
+                var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneRoute>(
+                    clientOne, mapper);
 
-                var providerTwo = new ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoSearchResponse, ProviderTwoRoute>(
-                    clientTwo, converterTwo);
+                var providerTwo = new ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoRoute>(
+                    clientTwo, mapper);
 
 
 

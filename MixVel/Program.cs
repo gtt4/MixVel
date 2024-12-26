@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Configuration;
+using MixVel.Providers.ProviderOne;
+using MixVel.Providers.ProviderTwo;
 using MixVel.Service;
 using MixVel.Settings;
 
@@ -6,13 +8,13 @@ var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
 // Add services to the container.
-
-builder.Services.AddControllers();
+var services = builder.Services;
+services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.Configure<ProviderSettings>(configuration.GetSection("Providers"));
-builder.Services.AddSingleton<IProviderUriResolver, ProviderUriResolver>();
+services.AddEndpointsApiExplorer();
+services.AddSwaggerGen();
+services.Configure<ProviderSettings>(configuration.GetSection("Providers"));
+services.AddSingleton<IProviderUriResolver, ProviderUriResolver>();
 
 
 builder.Services.AddCustomServices(builder.Configuration);
