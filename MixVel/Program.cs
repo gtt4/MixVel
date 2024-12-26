@@ -1,6 +1,7 @@
 using Prometheus.HttpClientMetrics;
 using MixVel.Service;
 using MixVel.Settings;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -13,6 +14,7 @@ services.AddEndpointsApiExplorer();
 services.AddSwaggerGen();
 services.Configure<ProviderSettings>(configuration.GetSection("Providers"));
 services.AddSingleton<IProviderUriResolver, ProviderUriResolver>();
+services.AddSingleton<IMetricsService, PrometheusMetricsService>();
 
 
 builder.Services.AddCustomServices(builder.Configuration);
@@ -26,6 +28,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.MapMetrics();
 
 app.UseHttpsRedirection();
 

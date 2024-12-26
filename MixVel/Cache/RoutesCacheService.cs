@@ -1,4 +1,5 @@
 ﻿using MixVel.Interfaces;
+using Prometheus;
 using System.Collections.Concurrent;
 using Route = MixVel.Interfaces.Route;
 
@@ -9,14 +10,16 @@ public class RoutesCacheService : IRoutesCacheService
     private readonly object _earliestTimeLimitLock = new();
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
+    private readonly IMetricsService _metricsService;
 
     public DateTime EarliestTimeLimit { get; set; } = DateTime.MaxValue;
 
 
-    public RoutesCacheService(ILogger<RoutesCacheService> logger)
+    public RoutesCacheService(ILogger<RoutesCacheService> logger, IMetricsService metricsService)
     {
         _logger = logger;
         _searchFilter = new SearchFilter();
+        _metricsService = metricsService;
     }
 
     public void Add(IEnumerable<Route> routes)
@@ -46,9 +49,10 @@ public class RoutesCacheService : IRoutesCacheService
 
         if (!_originIndex.TryGetValue(request.Origin, out var originSet))
         {
+            _metricsService.IncrementCounter("cache_misses", new[] { request.Origin });
             return Enumerable.Empty<Route>();
         }
-
+        _metricsService.IncrementCounter("cache_hits", new[] { request.Origin });
         IEnumerable<Guid> routeIds;
         lock (originSet)
         {

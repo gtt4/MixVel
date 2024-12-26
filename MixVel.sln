@@ -7,8 +7,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MixVel", "MixVel\MixVel.csp
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tests", "Tests\Tests.csproj", "{5A0E8139-B2A9-4C78-8F4A-7477635143EC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MockProviderClients", "MockProviderClients\MockProviderClients.csproj", "{6F3132D9-5F77-4AB1-86F3-4C563AC33D9C}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,10 +21,6 @@ Global
 		{5A0E8139-B2A9-4C78-8F4A-7477635143EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5A0E8139-B2A9-4C78-8F4A-7477635143EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5A0E8139-B2A9-4C78-8F4A-7477635143EC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6F3132D9-5F77-4AB1-86F3-4C563AC33D9C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6F3132D9-5F77-4AB1-86F3-4C563AC33D9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6F3132D9-5F77-4AB1-86F3-4C563AC33D9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6F3132D9-5F77-4AB1-86F3-4C563AC33D9C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -30,7 +30,7 @@ namespace MixVel.Service
                 HttpClient httpClientOne;
                 HttpClient httpClientTwo;
 
-                if (useMockClients)
+                if (true)
                 {
 
                     httpClientOne = new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>());

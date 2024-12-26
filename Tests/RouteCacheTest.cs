@@ -1,11 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using MixVel.Interfaces;
 using Moq;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Tests
 {
@@ -16,7 +11,9 @@ namespace Tests
         {
             // Arrange
             var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var cacheService = new RoutesCacheService(loggerMock);
+            var metricsMock = Mock.Of<IMetricsService>();
+
+            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
             var route = new Route
             {
                 Id = Guid.NewGuid(),
@@ -38,7 +35,9 @@ namespace Tests
         {
             // Arrange
             var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var cacheService = new RoutesCacheService(loggerMock);
+            var metricsMock = Mock.Of<IMetricsService>();
+
+            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
             var expiredRoute = new Route
             {
                 Id = Guid.NewGuid(),
@@ -62,7 +61,9 @@ namespace Tests
         {
             // Arrange
             var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var cacheService = new RoutesCacheService(loggerMock);
+            var metricsMock = Mock.Of<IMetricsService>();
+
+            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
             var expiredRoute = new Route
             {
                 Id = Guid.NewGuid(),
