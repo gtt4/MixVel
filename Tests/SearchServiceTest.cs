@@ -29,10 +29,9 @@ namespace Tests
             var response = await searchService.SearchAsync(request, CancellationToken.None);
 
             // Assert
-            //response.Routes.Should().BeEquivalentTo(cachedRoutes);
+            
             CollectionAssert.AreEqual(cachedRoutes, response.Routes);
-
-            cacheMock.Verify(c => c.Get(request), Times.Once); // TODO
+            cacheMock.Verify(c => c.Get(request), Times.Once); 
         }
 
     }
