@@ -6,7 +6,7 @@ public class PrometheusMetricsService : IMetricsService
     private readonly Counter _cacheMisses = Metrics.CreateCounter("cache_misses", "Number of cache misses", "origin");
     private readonly Histogram _searchLatency = Metrics.CreateHistogram("search_latency_seconds", "Search latency", "provider");
 
-    public void IncrementCounter(string metricName, string[] labels = null)
+    public void IncrementCounter(string metricName, string[]? labels = null)
     {
         switch (metricName)
         {
@@ -19,7 +19,7 @@ public class PrometheusMetricsService : IMetricsService
         }
     }
 
-    public void ObserveHistogram(string metricName, double value, string[] labels = null)
+    public void ObserveHistogram(string metricName, double value, string[]? labels = null)
     {
         switch (metricName)
         {

@@ -10,7 +10,7 @@ public class MockClient
     private readonly JsonSerializerOptions _serializerOptions;
     private readonly ResponseGenerator _responseGenerator;
 
-    public MockClient(ResponseGenerator responseGenerator = null)
+    public MockClient(ResponseGenerator? responseGenerator = null)
     {
         _serializerOptions = new JsonSerializerOptions
         {
@@ -106,7 +106,7 @@ public class ResponseGenerator
         string to,
         DateTime dateFrom,
         int count,
-        Func<string, string, DateTime, int, TRoute> routeGenerator = null)
+        Func<string, string, DateTime, int, TRoute>? routeGenerator = null)
     {
         routeGenerator ??= (fromPoint, toPoint, date, i) => (TRoute)(object)new ProviderOneRoute
         {

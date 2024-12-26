@@ -52,7 +52,7 @@ public class ProviderTwoClient : IProviderClient<ProviderTwoSearchRequest, Provi
         if (response.IsSuccessStatusCode)
         {
             var result = await response.Content.ReadFromJsonAsync<ProviderTwoSearchResponse>(cancellationToken: cancellationToken);
-            return result?.Routes;
+            return result.Routes;
         }
         else
         {

@@ -3,7 +3,7 @@ using Route = MixVel.Interfaces.Route;
 
 internal class SearchFilter
 {
-    public IEnumerable<Route> ApplyFilters(SearchFilters filters, IEnumerable<Route?> routes)
+    public IEnumerable<Route> ApplyFilters(SearchFilters filters, IEnumerable<Route> routes)
     {
         if (filters == null) return routes;
 
