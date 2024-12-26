@@ -1,9 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MixVel.Interfaces;
-using System;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace MixVel.Controllers
 {
@@ -40,7 +37,6 @@ namespace MixVel.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception (using a logging framework)
                 return StatusCode((int)HttpStatusCode.InternalServerError, new { Message = "An unexpected error occurred.", Details = ex.Message });
             }
         }
@@ -61,7 +57,6 @@ namespace MixVel.Controllers
             }
             catch (Exception ex)
             {
-                // Log the exception (using a logging framework)
                 return StatusCode((int)HttpStatusCode.InternalServerError, new { Message = "An unexpected error occurred.", Details = ex.Message });
             }
         }

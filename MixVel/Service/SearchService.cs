@@ -9,6 +9,7 @@ namespace MixVel.Service
         private readonly IRoutesCacheService _cacheService;
         private readonly ILogger<SearchService> _logger;
         private readonly SearchAggregator _aggregator;
+        private readonly SearchFilter _searchFilter;
 
         public SearchService(List<IProvider> providers, IRoutesCacheService cacheService, ILogger<SearchService> logger) 
         {
@@ -16,6 +17,7 @@ namespace MixVel.Service
             _cacheService = cacheService ?? throw new ArgumentNullException(nameof(cacheService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _aggregator = new SearchAggregator();
+            _searchFilter = new SearchFilter();
         }
 
         public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
@@ -41,11 +43,11 @@ namespace MixVel.Service
                 {
                     var routes = await provider.SearchAsync(request, cancellationToken);
                     _cacheService.Add(routes);
-                    return routes;
+                    return _searchFilter.ApplyFilters(request.Filters, routes); 
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error fetching routes from provider {Provider}", provider.GetType().Name);
+                    _logger.LogError(ex, $"Error fetching routes from provider {provider.GetType().Name}");
                     return Enumerable.Empty<Route>();
                 }
             });
@@ -56,55 +58,5 @@ namespace MixVel.Service
             return _aggregator.Aggregate(allRoutes);
         }
     }
-
-    //private SearchResponse MergeRouteAggregates(RoutesAggregate[] partialAggregates)
-    //    {
-    //        var searchResponse = new SearchResponse();
-    //        var notEmptyPartialAggregates = partialAggregates.Where(x => x.HaveResult);
-
-    //        if (!notEmptyPartialAggregates.Any()) return new SearchResponse();
-    //        searchResponse.Routes = notEmptyPartialAggregates.Select(x => x.Routes).SelectMany(x => x).ToArray();
-    //        searchResponse.MinMinutesRoute = notEmptyPartialAggregates.Min(x => x.MinTime);
-    //        searchResponse.MinPrice = notEmptyPartialAggregates.Min(x => x.MinPrice);
-    //        return searchResponse;
-    //    }
-
-    //    private RoutesAggregate Aggregate(IEnumerable<Route> routes)
-    //    {
-    //        if (!routes.Any()) return new RoutesAggregate();
-
-    //        var first = routes.FirstOrDefault();
-    //        var minPrice = first.Price;
-    //        var minTime = first.DestinationDateTime - first.OriginDateTime;
-
-    //        foreach (var item in routes)
-    //        {
-    //            if (minPrice > item.Price)
-    //                minPrice = item.Price;
-
-    //            if (minTime > item.DestinationDateTime - item.OriginDateTime)
-    //                minTime = item.DestinationDateTime - item.OriginDateTime;
-    //        }
-
-    //        return new RoutesAggregate()
-    //        {
-    //            Routes = routes,
-    //            MinPrice = minPrice,
-    //            MinTime = (int)minTime.TotalMinutes
-    //        };
-    //    }
-
-
-    //    private async Task<IEnumerable<Route>> GetRoutesFromProviderAsync(IProvider client, SearchRequest request, CancellationToken cancellationToken)
-    //    {
-    //        try
-    //        {
-    //            return await client.SearchAsync(request, cancellationToken);
-    //        }
-    //        catch (Exception ex)
-    //        {
-    //            return Enumerable.Empty<Route>();
-    //        }
-    //    }
-    }
+}
 

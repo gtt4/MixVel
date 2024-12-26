@@ -8,13 +8,15 @@ public class RoutesCacheService : IRoutesCacheService
     private readonly ConcurrentDictionary<string, HashSet<Guid>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _earliestTimeLimitLock = new();
     private readonly ILogger<RoutesCacheService> _logger;
+    private readonly SearchFilter _searchFilter;
 
     public DateTime EarliestTimeLimit { get; set; } = DateTime.MaxValue;
 
 
     public RoutesCacheService(ILogger<RoutesCacheService> logger)
     {
-            _logger = logger;
+        _logger = logger;
+        _searchFilter = new SearchFilter();
     }
 
     public void Add(IEnumerable<Route> routes)
@@ -59,41 +61,23 @@ public class RoutesCacheService : IRoutesCacheService
             .Where(route => route != null && route.TimeLimit > now);
 
         if (request.Filters != null)
-            routes = ApplyFilters(request.Filters, routes);
+            routes = _searchFilter.ApplyFilters(request.Filters, routes);
 
         return routes.ToList();
     }
 
-    private static IEnumerable<Route?> ApplyFilters(SearchFilters filters, IEnumerable<Route?> routes)
-    {
 
-        //if (filters.DestinationDateTime.HasValue)
-        //{
-        //    routes = routes.Where(route => route.DestinationDateTime.Date == filters.DestinationDateTime.Value.Date);
-        //}
-
-        if (filters.MaxPrice.HasValue)
-        {
-            routes = routes.Where(route => route.Price <= filters.MaxPrice.Value);
-        }
-
-        //if (filters.MinTimeLimit.HasValue)
-        //{
-        //    routes = routes.Where(route => route.TimeLimit >= filters.MinTimeLimit.Value);
-        //}
-
-
-        return routes;
-    }
 
     public void Invalidate()
     {
         var now = DateTime.UtcNow;
         var expiredRouteIds = new List<Guid>();
 
-        if (now < EarliestTimeLimit) {
+        if (now < EarliestTimeLimit)
+        {
             _logger.LogInformation("Nothing to remove less them earliest");
-            return; };
+            return;
+        };
 
         foreach (var kvp in _routeCache)
         {

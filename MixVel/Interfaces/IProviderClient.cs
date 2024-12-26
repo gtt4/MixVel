@@ -8,12 +8,4 @@ namespace MixVel.Interfaces
         Task<bool> IsAvailableAsync(CancellationToken cancellationToken);
         Task<Route[]> SearchAsync(Request request, CancellationToken cancellationToken);
     }
-
-    //public interface IProviderOne: IProviderClient<ProviderOneSearchRequest, ProviderOneSearchResponse>
-    //{
-    //}
-
-    //public interface IProviderTwo: IProviderClient<ProviderTwoSearchRequest, ProviderTwoSearchResponse>
-    //{
-    //}
 }
