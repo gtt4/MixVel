@@ -58,7 +58,13 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
 
     private int GetRouteKey(Route route)
     {
-        return route.GetHashCode();
+        return HashCode.Combine(route.Origin?.ToLowerInvariant(),
+                route.Destination?.ToLowerInvariant(),
+                route.OriginDateTime,
+                route.DestinationDateTime,
+                route.Price,
+                route.TimeLimit
+            );
     }
 
     public IEnumerable<Route> Get(SearchRequest request)
