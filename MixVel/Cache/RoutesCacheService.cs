@@ -1,12 +1,11 @@
 ﻿using MixVel.Interfaces;
-using Prometheus;
 using System.Collections.Concurrent;
 using Route = MixVel.Interfaces.Route;
 
 public class RoutesCacheService : IRoutesCacheService
 {
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
-    private readonly ConcurrentDictionary<string, HashSet<Guid>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _earliestTimeLimitLock = new();
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
@@ -27,37 +26,20 @@ public class RoutesCacheService : IRoutesCacheService
     {
         var now = DateTime.UtcNow;
 
-        // Group valid routes by Origin
         var groupedRoutes = routes
-            .Where(route => route.TimeLimit > now) // Filter valid routes
+            .Where(route => route.TimeLimit > now) 
             .GroupBy(route => route.Origin);
 
         foreach (var group in groupedRoutes)
         {
             var origin = group.Key;
-            var routeIds = new List<Guid>();
+            var originSet = _originIndex.GetOrAdd(origin, _ => new ConcurrentDictionary<Guid, byte>());
 
-            // Update the cache and collect route IDs
             foreach (var route in group)
             {
-                _routeCache[route.Id] = route; // Add to cache
-                routeIds.Add(route.Id); // Collect IDs
-                UpdateEarliestTimeLimit(route.TimeLimit); // Update time limit
-            }
-
-            // Lock once per origin and update the set
-            var originSet = _originIndex.GetOrAdd(origin, _ => new HashSet<Guid>());
-            _readerLockSlim.EnterWriteLock();
-            try
-            {
-                foreach (var routeId in routeIds)
-                {
-                    originSet.Add(routeId);
-                }
-            }
-            finally
-            {
-                _readerLockSlim.ExitWriteLock();
+                _routeCache[route.Id] = route;
+                originSet[route.Id] = 0;
+                UpdateEarliestTimeLimit(route.TimeLimit); 
             }
         }
     }
@@ -74,18 +56,14 @@ public class RoutesCacheService : IRoutesCacheService
             return Enumerable.Empty<Route>();
         }
         _metricsService.IncrementCounter("cache_hits", new[] { request.Origin });
-        List<Route> routes;
+ 
 
-        _readerLockSlim.EnterReadLock();
-        try
-        { 
-            routes = originSet.Select(id => _routeCache.TryGetValue(id, out Route route) ? route : null).ToList();
-        }
-        finally { _readerLockSlim.ExitReadLock(); }
-        
+        var routes = originSet.Keys
+              .Select(id => _routeCache.TryGetValue(id, out var route) ? route : null)
+              .Where(route => route != null && route.TimeLimit > now)
+              .ToList();
 
-
-        return _searchFilter.ApplyFilters(request.Filters, routes.Where(route => route != null && route.TimeLimit > now));
+        return _searchFilter.ApplyFilters(request.Filters, routes);
     }
 
 
@@ -116,27 +94,13 @@ public class RoutesCacheService : IRoutesCacheService
                 continue;
             }
 
-            _logger.LogInformation($"Remove{route.TimeLimit} at {DateTime.UtcNow}");
-            bool needToRemove = false;
             if (_originIndex.TryGetValue(route.Origin, out var originSet))
             {
-                _readerLockSlim.EnterWriteLock();
-                try
+                originSet.TryRemove(routeId, out _);
+                if (originSet.IsEmpty)
                 {
-                    originSet.Remove(routeId);
-                    if (originSet.Count == 0)
-                    {
-                        needToRemove = true;
-                        
-                    }
-                }
-                finally
-                {
-                    _readerLockSlim.ExitWriteLock();
-                }
-
-                if (needToRemove)
                     _originIndex.TryRemove(route.Origin, out _);
+                }
             }
         }
 
