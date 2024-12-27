@@ -84,6 +84,39 @@ namespace Tests
 
             Assert.IsEmpty(cachedRoutes);
         }
+        [Test]
+        public void Add_ShouldNotAddDuplicateRoutesToCache()
+        {
+            // Arrange
+            var mockLogger = new Mock<ILogger<RoutesCacheService>>();
+            var mockMetricsService = new Mock<IMetricsService>();
+            var service = new RoutesCacheService(mockLogger.Object, mockMetricsService.Object);
+
+            var now = DateTime.UtcNow;
+
+            var routes = new List<Route>
+        {
+            new Route { Id = Guid.NewGuid(), Origin = "A", Destination = "B", TimeLimit = now.AddHours(1) },
+            new Route { Id = Guid.NewGuid(), Origin = "A", Destination = "B", TimeLimit = now.AddHours(1) }, // Duplicate
+            new Route { Id = Guid.NewGuid(), Origin = "C", Destination = "D", TimeLimit = now.AddHours(2) }
+        };
+
+            // Act
+            service.Add(routes);
+
+            // Assert
+            var result = service.Get(new SearchRequest { Origin = "A" }).ToList();
+
+            Assert.That(result, Has.Count.EqualTo(1)); // Only one route from "A" to "B" should exist
+            Assert.That(result, Has.Exactly(1).Matches<Route>(r =>
+                r.Origin == "A" && r.Destination == "B" && r.TimeLimit == now.AddHours(1)));
+
+            var allRoutes = service.Get(new SearchRequest { Origin = "C" }).ToList();
+            Assert.That(allRoutes, Has.Count.EqualTo(1)); // Verify other routes are unaffected
+            Assert.That(allRoutes, Has.Exactly(1).Matches<Route>(r =>
+                r.Origin == "C" && r.Destination == "D" && r.TimeLimit == now.AddHours(2)));
+        }
+
 
     }
 }

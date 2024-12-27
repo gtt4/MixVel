@@ -5,6 +5,7 @@ using Route = MixVel.Interfaces.Route;
 public class RoutesCacheService : IRoutesCacheService
 {
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
+    private readonly ConcurrentDictionary<string, Guid> _routeKeys = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _earliestTimeLimitLock = new();
     private readonly ILogger<RoutesCacheService> _logger;
@@ -42,6 +43,13 @@ public class RoutesCacheService : IRoutesCacheService
 
             foreach (var route in group)
             {
+                var routeHash = GetRouteHash(route);
+
+                if (!_routeKeys.TryAdd(routeHash, route.Id))
+                {
+                    // Route already exists, skip adding
+                    continue;
+                }
                 route.Id = Guid.NewGuid();  
                 _routeCache[route.Id] = route;
                 originSet[route.Id] = 0;
@@ -50,7 +58,10 @@ public class RoutesCacheService : IRoutesCacheService
         }
     }
 
-
+    private string GetRouteHash(Route route)
+    {
+        return $"{route.Origin}_{route.Destination}_{route.TimeLimit}"; // TODO hash
+    }
 
     public IEnumerable<Route> Get(SearchRequest request)
     {
@@ -100,6 +111,9 @@ public class RoutesCacheService : IRoutesCacheService
             {
                 continue;
             }
+
+            var routeKey = GetRouteHash(route);
+            _routeKeys.TryRemove(routeKey, out _);
 
             if (_originIndex.TryGetValue(route.Origin, out var originSet))
             {
