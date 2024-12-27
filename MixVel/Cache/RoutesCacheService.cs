@@ -42,6 +42,7 @@ public class RoutesCacheService : IRoutesCacheService
 
             foreach (var route in group)
             {
+                route.Id = Guid.NewGuid();  
                 _routeCache[route.Id] = route;
                 originSet[route.Id] = 0;
                 UpdateEarliestTimeLimit(route.TimeLimit);

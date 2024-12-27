@@ -15,7 +15,6 @@ namespace MixVel.Providers.ProviderTwo
                 .ForMember(dest => dest.MinTimeLimit, opt => opt.MapFrom(src => src.Filters != null ? src.Filters.MinTimeLimit : null));
 
             CreateMap<ProviderTwoRoute, Route>()
-                .ForMember(dest => dest.Id, opt => opt.MapFrom(_ => Guid.NewGuid()))
                 .ForMember(dest => dest.Origin, opt => opt.MapFrom(src => src.Departure.Point))
                 .ForMember(dest => dest.Destination, opt => opt.MapFrom(src => src.Arrival.Point))
                 .ForMember(dest => dest.OriginDateTime, opt => opt.MapFrom(src => src.Departure.Date))

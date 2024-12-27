@@ -17,7 +17,6 @@ namespace MixVel.Providers.ProviderOne
                 .ForMember(dest => dest.MaxPrice, opt => opt.MapFrom(src => src.Filters != null ? src.Filters.MaxPrice : null));
 
             CreateMap<ProviderOneRoute, Route>()
-                        .ForMember(dest => dest.Id, opt => opt.MapFrom(_ => Guid.NewGuid())) // TODO Move to service\check equality
                         .ForMember(dest => dest.Origin, opt => opt.MapFrom(src => src.From))
                         .ForMember(dest => dest.Destination, opt => opt.MapFrom(src => src.To))
                         .ForMember(dest => dest.OriginDateTime, opt => opt.MapFrom(src => src.DateFrom))

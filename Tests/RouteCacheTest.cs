@@ -16,7 +16,6 @@ namespace Tests
             var cacheService = new RoutesCacheService(loggerMock, metricsMock);
             var route = new Route
             {
-                Id = Guid.NewGuid(),
                 Origin = "A",
                 Destination = "B",
                 TimeLimit = DateTime.UtcNow.AddMinutes(30)
@@ -27,6 +26,10 @@ namespace Tests
 
             // Assert
             var cachedRoutes = cacheService.Get(new SearchRequest { Origin = "A" }).ToList();
+            foreach (var cachedRoute in cachedRoutes)
+            {
+                Assert.IsTrue(Guid.Empty != cachedRoute.Id);
+            }
             Assert.Contains(route, cachedRoutes);
         }
 
