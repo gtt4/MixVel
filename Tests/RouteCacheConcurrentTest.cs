@@ -56,6 +56,12 @@ namespace Tests
         };
         }
 
+        [TearDown]
+        public void TearDown() 
+        {
+            _cacheService.Dispose();
+        }
+
         [Test]
         public void RoutesCacheService_HandlesConcurrentAccessCorrectly()
         {

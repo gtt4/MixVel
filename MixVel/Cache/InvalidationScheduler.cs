@@ -2,7 +2,7 @@
 
 namespace MixVel.Cache
 {
-    public class InvalidationScheduler : IDisposable
+    public class InvalidationScheduler : IDisposable, IAsyncDisposable
     {
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _backgroundTask;
@@ -13,9 +13,9 @@ namespace MixVel.Cache
 
         public InvalidationScheduler(IRoutesCacheService cache, ILogger<InvalidationScheduler> logger)
         {
-            _cache = cache;
+            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _backgroundTask = Task.Run(InvalidatePeriodicallyAsync);
-            _logger = logger;
         }
 
         private async Task InvalidatePeriodicallyAsync()
@@ -24,39 +24,60 @@ namespace MixVel.Cache
             {
                 while (!_cts.Token.IsCancellationRequested)
                 {
-                    InvalidateIfNecessary();
-                    var delay = ComputeDelay();
-                    _logger.LogInformation($"invalidation delay = {delay.TotalMinutes}");
-                    await Task.Delay(delay, _cts.Token);
+                    try
+                    {
+                        InvalidateIfNecessary(_cts.Token);
+                        var delay = ComputeDelay();
+                        await Task.Delay(delay, _cts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "An error occurred during cache invalidation.");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "The invalidation task encountered a fatal error and will terminate.");
+            }
+        }
+
+
+        private TimeSpan ComputeDelay()
+        {
+            var now = DateTime.UtcNow;
+            var earliestTimeLimit = new DateTime(_cache.EarliestTimeLimitTicks);
+
+            var delay = earliestTimeLimit > now
+                ? earliestTimeLimit - now
+                : TimeSpan.FromSeconds(_defaultDelayMax);
+
+            var clampedSeconds = Math.Clamp(delay.TotalSeconds, _defaultDelayMin, _defaultDelayMax);
+            return TimeSpan.FromSeconds(clampedSeconds);
+        }
+
+        private void InvalidateIfNecessary(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _cache.Invalidate();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _cts.Cancel();
+            try
+            {
+                await _backgroundTask;
             }
             catch (OperationCanceledException)
             {
                 // 
             }
-        }
-
-        private TimeSpan ComputeDelay()
-        {
-            var now = DateTime.UtcNow.Ticks;
-            var earliestTimeLimit = _cache.EarliestTimeLimitTicks;
-
-            var delay = earliestTimeLimit <= now
-                ? TimeSpan.FromSeconds(_defaultDelayMax * 2)
-                : TimeSpan.FromTicks(earliestTimeLimit - now);
-
-            return TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, _defaultDelayMin, _defaultDelayMax));
-        }
-
-        private void InvalidateIfNecessary()
-        {
-            try
-            {
-                _cache.Invalidate();
-            }
-            finally
-            {
-            }
+            _cts.Dispose();
         }
 
         public void Dispose()

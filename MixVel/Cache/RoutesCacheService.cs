@@ -2,23 +2,22 @@
 using System.Collections.Concurrent;
 using Route = MixVel.Interfaces.Route;
 
-public class RoutesCacheService : IRoutesCacheService
+public class RoutesCacheService : IRoutesCacheService, IDisposable
 {
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
-    private readonly ConcurrentDictionary<string, Guid> _routeKeys = new();
+    private readonly ConcurrentDictionary<string, Guid> _routeHashes = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _earliestTimeLimitLock = new();
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
     private readonly IMetricsService _metricsService;
-    private readonly ReaderWriterLockSlim _readerLockSlim = new ReaderWriterLockSlim();
+    private bool _disposed = false;
 
     public long _earliestTimeLimitTicks;
 
     public long EarliestTimeLimitTicks
     {
-        get { return _earliestTimeLimitTicks; }
-        set { _earliestTimeLimitTicks = value; }
+        get => Interlocked.Read(ref _earliestTimeLimitTicks);
+        set => Interlocked.Exchange(ref _earliestTimeLimitTicks, value);
     }
 
     public RoutesCacheService(ILogger<RoutesCacheService> logger, IMetricsService metricsService)
@@ -45,9 +44,10 @@ public class RoutesCacheService : IRoutesCacheService
             {
                 var routeHash = GetRouteHash(route);
 
-                if (!_routeKeys.TryAdd(routeHash, route.Id))
+                if (!_routeHashes.TryAdd(routeHash, route.Id))
                 {
                     // Route already exists, skip adding
+                    _logger.LogInformation($"Duplicatied route {routeHash} wasnt added");
                     continue;
                 }
                 route.Id = Guid.NewGuid();  
@@ -85,18 +85,15 @@ public class RoutesCacheService : IRoutesCacheService
 
 
 
-    public void Invalidate()
+    public void Invalidate() 
     {
         var now = DateTime.UtcNow;
+
+        if (now.Ticks < EarliestTimeLimitTicks) return;
+            
         var expiredRouteIds = new List<Guid>();
-
-        var nowTicks = DateTime.UtcNow.Ticks;
-        if (nowTicks < _earliestTimeLimitTicks)
-        {
-            return;
-        }
-
-        foreach (var kvp in _routeCache)
+        
+        foreach (var kvp in _routeCache) 
         {
             var route = kvp.Value;
             if (route.TimeLimit <= now)
@@ -112,8 +109,8 @@ public class RoutesCacheService : IRoutesCacheService
                 continue;
             }
 
-            var routeKey = GetRouteHash(route);
-            _routeKeys.TryRemove(routeKey, out _);
+            var routeHash = GetRouteHash(route);
+            _routeHashes.TryRemove(routeHash, out _);
 
             if (_originIndex.TryGetValue(route.Origin, out var originSet))
             {
@@ -134,7 +131,7 @@ public class RoutesCacheService : IRoutesCacheService
         long oldTicks;
         do
         {
-            oldTicks = _earliestTimeLimitTicks;
+            oldTicks = Interlocked.Read(ref _earliestTimeLimitTicks);
             if (newTicks >= oldTicks) break;
         } while (Interlocked.CompareExchange(ref _earliestTimeLimitTicks, newTicks, oldTicks) != oldTicks);
     }
@@ -149,6 +146,26 @@ public class RoutesCacheService : IRoutesCacheService
 
         var minTimeLimitTicks = _routeCache.Values.Min(route => route.TimeLimit.Ticks);
         UpdateEarliestTimeLimit(new DateTime(minTimeLimitTicks));
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _routeCache.Clear();
+            _routeHashes.Clear();
+            _originIndex.Clear();
+        }
+
+        _disposed = true;
     }
 }
 
