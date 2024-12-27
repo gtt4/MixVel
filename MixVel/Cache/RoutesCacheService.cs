@@ -24,7 +24,7 @@ public class RoutesCacheService : IRoutesCacheService
 
     public void Add(IEnumerable<Route> routes)
     {
-        var now = DateTime.UtcNow;
+        var now = DateTime.UtcNow; // TODO Clarify requirments. Assume timelimit is in UTC
 
         var groupedRoutes = routes
             .Where(route => route.TimeLimit > now) 

@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using MixVel.Interfaces;
+using MixVel.Providers;
 using MixVel.Service;
 using Moq;
 

@@ -1,4 +1,7 @@
-﻿namespace MixVel.Interfaces
+﻿using MixVel.Interfaces;
+using Route = MixVel.Interfaces.Route;
+
+namespace MixVel.Providers
 {
     public interface IProvider
     {

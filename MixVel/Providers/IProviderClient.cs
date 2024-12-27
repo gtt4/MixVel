@@ -1,7 +1,7 @@
 ﻿using MixVel.Providers.ProviderOne;
 using MixVel.Providers.ProviderTwo;
 
-namespace MixVel.Interfaces
+namespace MixVel.Providers
 {
     public interface IProviderClient<Request, Route>
     {

@@ -1,4 +1,4 @@
-using MixVel.Interfaces;
+using MixVel.Providers;
 using MixVel.Providers.ProviderTwo;
 using MixVel.Settings;
 using Polly;

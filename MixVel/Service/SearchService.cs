@@ -1,4 +1,5 @@
 ﻿using MixVel.Interfaces;
+using MixVel.Providers;
 using Route = MixVel.Interfaces.Route;
 
 namespace MixVel.Service
@@ -48,7 +49,7 @@ namespace MixVel.Service
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, $"Error fetching routes from provider {provider.GetType().Name}");
-                    return Enumerable.Empty<Route>();
+                    return Enumerable.Empty<Route>(); // TODO Clarify requirments
                 }
             });
 

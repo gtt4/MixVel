@@ -8,6 +8,8 @@ namespace MixVel.Cache
         private readonly Task _backgroundTask;
         private readonly ILogger<InvalidationScheduler> _logger;
         private readonly IRoutesCacheService _cache;
+        private readonly int _defaultDelayMax = 60;
+        private readonly int _defaultDelayMin = 5;
 
         public InvalidationScheduler(IRoutesCacheService cache, ILogger<InvalidationScheduler> logger)
         {
@@ -30,7 +32,7 @@ namespace MixVel.Cache
             }
             catch (OperationCanceledException)
             {
-                // Cancellation requested, exit the loop
+                // 
             }
         }
 
@@ -40,10 +42,10 @@ namespace MixVel.Cache
             var earliestTimeLimit = _cache.EarliestTimeLimit;
 
             var delay = earliestTimeLimit <= now
-                ? TimeSpan.FromMinutes(1) // Default delay
+                ? TimeSpan.FromSeconds(_defaultDelayMax * 2) 
                 : earliestTimeLimit - now;
 
-            return TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, 5, 50));
+            return TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, _defaultDelayMin, _defaultDelayMax));
 
         }
 

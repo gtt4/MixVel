@@ -1,5 +1,4 @@
-﻿using MixVel.Interfaces;
-using MixVel.Settings;
+﻿using MixVel.Settings;
 using Polly;
 
 namespace MixVel.Providers.ProviderOne

@@ -15,9 +15,6 @@ namespace MixVel.Service
             services.AddSingleton<IRoutesCacheService, RoutesCacheService>();
             services.AddSingleton<InvalidationScheduler>();
 
-            
-            bool useMockClients = configuration.GetValue<bool>("UseMockClients");
-
             services.AddSingleton<ISearchService>(provider =>
             {
                 var cache = provider.GetRequiredService<IRoutesCacheService>();
@@ -27,25 +24,21 @@ namespace MixVel.Service
                 var logger = provider.GetRequiredService<ILogger<SearchService>>();
 
 
-                HttpClient httpClientOne;
-                HttpClient httpClientTwo;
+                HttpClient httpClient;
+                var useMockClients = false; // TODO 
 
-                if (true)
+                if (useMockClients)  
                 {
 
-                    httpClientOne = new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>());
-                    httpClientTwo = httpClientOne;
+                    httpClient = new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>());
                 }
                 else
                 {
-                    var httpClientFactory = provider.GetRequiredService<IHttpClientFactory>();
-
-                    httpClientOne = httpClientFactory.CreateClient("ProviderOneClient");
-                    httpClientTwo = httpClientFactory.CreateClient("ProviderTwoClient");
+                    httpClient = new HttpClient(); 
                 }
 
-                var clientOne = new ProviderOneClient(httpClientOne, uriResolver);
-                var clientTwo = new ProviderTwoClient(httpClientTwo, uriResolver);
+                var clientOne = new ProviderOneClient(httpClient, uriResolver);
+                var clientTwo = new ProviderTwoClient(httpClient, uriResolver);
 
                 var configuration = new MapperConfiguration(cfg =>
                 {
@@ -65,21 +58,19 @@ namespace MixVel.Service
                 return new SearchService([providerOne, providerTwo], cache, logger);
             });
 
-            //// Register HTTP clients if using real clients
+
             //if (!useMockClients)
             //{
             //    services.AddHttpClient("ProviderOneClient", (provider, client) =>
             //    {
             //        var uriResolver = provider.GetRequiredService<IProviderUriResolver>();
             //        client.BaseAddress = new Uri(uriResolver.GetProviderOneUri());
-            //        // Configure client settings if needed
             //    });
 
             //    services.AddHttpClient("ProviderTwoClient", (provider, client) =>
             //    {
             //        var uriResolver = provider.GetRequiredService<IProviderUriResolver>();
             //        client.BaseAddress = new Uri(uriResolver.GetProviderTwoUri());
-            //        // Configure client settings if needed
             //    });
             //}
 
