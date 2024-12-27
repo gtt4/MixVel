@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.Extensions.DependencyInjection;
 using MixVel.Cache;
 using MixVel.Interfaces;
 using MixVel.Providers;
@@ -13,68 +14,55 @@ namespace MixVel.Service
         public static IServiceCollection AddCustomServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddSingleton<IRoutesCacheService, RoutesCacheService>();
+            services.AddSingleton<IPeriodicTask>(provider => (IPeriodicTask)provider.GetRequiredService<IRoutesCacheService>());
             services.AddSingleton<InvalidationScheduler>();
 
             services.AddSingleton<ISearchService>(provider =>
             {
                 var cache = provider.GetRequiredService<IRoutesCacheService>();
                 var scheduler = provider.GetRequiredService<InvalidationScheduler>();
-
                 var uriResolver = provider.GetRequiredService<IProviderUriResolver>();
                 var logger = provider.GetRequiredService<ILogger<SearchService>>();
 
+                var httpClient = CreateHttpClient(provider);
+                var mapper = CreateMapper();
+                var providers = CreateProviders(provider, httpClient, uriResolver, mapper);
 
-                HttpClient httpClient;
-                var useMockClients = false; // TODO 
-
-                if (useMockClients)  
-                {
-
-                    httpClient = new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>());
-                }
-                else
-                {
-                    httpClient = new HttpClient(); 
-                }
-
-                var clientOne = new ProviderOneClient(httpClient, uriResolver);
-                var clientTwo = new ProviderTwoClient(httpClient, uriResolver);
-
-                var configuration = new MapperConfiguration(cfg =>
-                {
-                    cfg.AddProfile<ProviderOneMappingProfile>();
-                    cfg.AddProfile<ProviderTwoMappingProfile>();
-                });
-                var mapper = configuration.CreateMapper();
-
-                var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneRoute>(
-                    clientOne, mapper);
-
-                var providerTwo = new ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoRoute>(
-                    clientTwo, mapper);
-
-
-
-                return new SearchService([providerOne, providerTwo], cache, logger);
+                return new SearchService(providers, cache, logger);
             });
 
-
-            //if (!useMockClients)
-            //{
-            //    services.AddHttpClient("ProviderOneClient", (provider, client) =>
-            //    {
-            //        var uriResolver = provider.GetRequiredService<IProviderUriResolver>();
-            //        client.BaseAddress = new Uri(uriResolver.GetProviderOneUri());
-            //    });
-
-            //    services.AddHttpClient("ProviderTwoClient", (provider, client) =>
-            //    {
-            //        var uriResolver = provider.GetRequiredService<IProviderUriResolver>();
-            //        client.BaseAddress = new Uri(uriResolver.GetProviderTwoUri());
-            //    });
-            //}
-
             return services;
+        }
+
+        private static HttpClient CreateHttpClient(IServiceProvider provider)
+        {
+            var useMockClients = false; // TODO: Replace with configuration or environment setting
+            return useMockClients
+                ? new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>())
+                : new HttpClient();
+        }
+
+        private static IMapper CreateMapper()
+        {
+            var configuration = new MapperConfiguration(cfg =>
+            {
+                cfg.AddProfile<ProviderOneMappingProfile>();
+                cfg.AddProfile<ProviderTwoMappingProfile>();
+            });
+            return configuration.CreateMapper();
+        }
+
+        private static List<IProvider> CreateProviders(IServiceProvider provider, HttpClient httpClient, IProviderUriResolver uriResolver, IMapper mapper)
+        {
+            var loggerForProviderOne = provider.GetRequiredService<ILogger<ProviderAdapter<ProviderOneSearchRequest, ProviderOneRoute>>>();
+            var providerOne = new ProviderAdapter<ProviderOneSearchRequest, ProviderOneRoute>(
+                new ProviderOneClient(httpClient, uriResolver), mapper, loggerForProviderOne);
+
+            var loggerForProviderTwo = provider.GetRequiredService<ILogger<ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoRoute>>>();
+            var providerTwo = new ProviderAdapter<ProviderTwoSearchRequest, ProviderTwoRoute>(
+                new ProviderTwoClient(httpClient, uriResolver), mapper, loggerForProviderTwo);
+
+            return new List<IProvider> { providerOne, providerTwo };
         }
     }
 }

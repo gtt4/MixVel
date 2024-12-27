@@ -2,6 +2,7 @@ using Prometheus.HttpClientMetrics;
 using MixVel.Service;
 using MixVel.Settings;
 using Prometheus;
+using MixVel.Cache;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -13,6 +14,8 @@ services.AddControllers();
 services.AddEndpointsApiExplorer();
 services.AddSwaggerGen();
 services.Configure<ProviderSettings>(configuration.GetSection("Providers"));
+services.Configure<InvalidationSchedulerSettings>(configuration.GetSection("InvalidationScheduler"));
+
 services.AddSingleton<IProviderUriResolver, ProviderUriResolver>();
 services.AddSingleton<IMetricsService, PrometheusMetricsService>();
 

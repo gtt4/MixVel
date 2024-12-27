@@ -1,4 +1,5 @@
-﻿using MixVel.Interfaces;
+﻿using Microsoft.Extensions.Options;
+using MixVel.Interfaces;
 
 namespace MixVel.Cache
 {
@@ -7,18 +8,22 @@ namespace MixVel.Cache
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _backgroundTask;
         private readonly ILogger<InvalidationScheduler> _logger;
-        private readonly IRoutesCacheService _cache;
-        private readonly int _defaultDelayMax = 60;
-        private readonly int _defaultDelayMin = 5;
-
-        public InvalidationScheduler(IRoutesCacheService cache, ILogger<InvalidationScheduler> logger)
+        private readonly IPeriodicTask _periodicTask;
+        private readonly InvalidationSchedulerSettings _settings;
+        
+        public InvalidationScheduler(IPeriodicTask periodicTask, ILogger<InvalidationScheduler> logger, IOptions<InvalidationSchedulerSettings> settings)
         {
-            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+            if (settings.Value.DelayMin <= 0 || settings.Value.DelayMin >= settings.Value.DelayMax)
+            {
+                throw new ArgumentOutOfRangeException(nameof(settings), "Minimum delay must be positive and less than the maximum delay.");
+            }
+            _periodicTask = periodicTask ?? throw new ArgumentNullException(nameof(periodicTask));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _backgroundTask = Task.Run(InvalidatePeriodicallyAsync);
+            _backgroundTask = Task.Run(RunPeriodicallyAsync);
+            _settings = settings.Value;
         }
 
-        private async Task InvalidatePeriodicallyAsync()
+        private async Task RunPeriodicallyAsync()
         {
             try
             {
@@ -26,8 +31,10 @@ namespace MixVel.Cache
                 {
                     try
                     {
-                        InvalidateIfNecessary(_cts.Token);
+                        _logger.LogInformation("Starting cache invalidation.");
+                        ExecuteIfNecessary(_cts.Token);
                         var delay = ComputeDelay();
+                        _logger.LogInformation($"Next cache invalidation scheduled after {delay.TotalSeconds} seconds.");
                         await Task.Delay(delay, _cts.Token);
                     }
                     catch (OperationCanceledException)
@@ -50,20 +57,20 @@ namespace MixVel.Cache
         private TimeSpan ComputeDelay()
         {
             var now = DateTime.UtcNow;
-            var earliestTimeLimit = new DateTime(_cache.EarliestTimeLimitTicks);
+            var earliestTimeLimit = new DateTime(_periodicTask.GetEarliestTimeLimitTicks());
 
             var delay = earliestTimeLimit > now
                 ? earliestTimeLimit - now
-                : TimeSpan.FromSeconds(_defaultDelayMax);
+                : TimeSpan.FromSeconds(_settings.DelayMax);
 
-            var clampedSeconds = Math.Clamp(delay.TotalSeconds, _defaultDelayMin, _defaultDelayMax);
+            var clampedSeconds = Math.Clamp(delay.TotalSeconds, _settings.DelayMin, _settings.DelayMax);
             return TimeSpan.FromSeconds(clampedSeconds);
         }
 
-        private void InvalidateIfNecessary(CancellationToken cancellationToken)
+        private void ExecuteIfNecessary(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _cache.Invalidate();
+            _periodicTask.Execute(cancellationToken);
         }
 
         public async ValueTask DisposeAsync()

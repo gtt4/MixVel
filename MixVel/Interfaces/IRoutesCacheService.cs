@@ -5,6 +5,11 @@
         void Add(IEnumerable<Route> routes);
         IEnumerable<Route> Get(SearchRequest request);
         void Invalidate();
-        long EarliestTimeLimitTicks { get; set; }
+    }
+
+    public interface IPeriodicTask
+    {
+        void Execute(CancellationToken cancellationToken);
+        long GetEarliestTimeLimitTicks();
     }
 }

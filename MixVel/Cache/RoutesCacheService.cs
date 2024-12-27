@@ -2,23 +2,16 @@
 using System.Collections.Concurrent;
 using Route = MixVel.Interfaces.Route;
 
-public class RoutesCacheService : IRoutesCacheService, IDisposable
+public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposable
 {
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
-    private readonly ConcurrentDictionary<string, Guid> _routeHashes = new();
+    private readonly ConcurrentDictionary<string, Guid> _routeKeys = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
     private readonly IMetricsService _metricsService;
     private bool _disposed = false;
-
-    public long _earliestTimeLimitTicks;
-
-    public long EarliestTimeLimitTicks
-    {
-        get => Interlocked.Read(ref _earliestTimeLimitTicks);
-        set => Interlocked.Exchange(ref _earliestTimeLimitTicks, value);
-    }
+    private long _earliestTimeLimitTicks;
 
     public RoutesCacheService(ILogger<RoutesCacheService> logger, IMetricsService metricsService)
     {
@@ -42,12 +35,12 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
 
             foreach (var route in group)
             {
-                var routeHash = GetRouteHash(route);
+                var routeKey = GetRouteKey(route);
 
-                if (!_routeHashes.TryAdd(routeHash, route.Id))
+                if (!_routeKeys.TryAdd(routeKey, route.Id))
                 {
                     // Route already exists, skip adding
-                    _logger.LogInformation($"Duplicatied route {routeHash} wasnt added");
+                    _logger.LogInformation($"Duplicate route {routeKey} was not added");
                     continue;
                 }
                 route.Id = Guid.NewGuid();  
@@ -58,9 +51,9 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
         }
     }
 
-    private string GetRouteHash(Route route)
+    private string GetRouteKey(Route route)
     {
-        return $"{route.Origin}_{route.Destination}_{route.TimeLimit}"; // TODO hash
+        return $"{route.Origin}_{route.Destination}_{route.TimeLimit}"; // TODO 
     }
 
     public IEnumerable<Route> Get(SearchRequest request)
@@ -83,13 +76,16 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
         return _searchFilter.ApplyFilters(request.Filters, routes);
     }
 
-
+    public void Execute(CancellationToken cancellationToken)
+    {
+        Invalidate();
+    }
 
     public void Invalidate() 
     {
         var now = DateTime.UtcNow;
 
-        if (now.Ticks < EarliestTimeLimitTicks) return;
+        if (now.Ticks < Interlocked.Read(ref _earliestTimeLimitTicks)) return;
             
         var expiredRouteIds = new List<Guid>();
         
@@ -101,16 +97,16 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
                 expiredRouteIds.Add(route.Id);
             }
         }
-
+        int countToRemoved = 0;
         foreach (var routeId in expiredRouteIds)
         {
             if (!_routeCache.TryRemove(routeId, out var route))
             {
                 continue;
             }
-
-            var routeHash = GetRouteHash(route);
-            _routeHashes.TryRemove(routeHash, out _);
+            countToRemoved++;
+            var routeKey = GetRouteKey(route);
+            _routeKeys.TryRemove(routeKey, out _);
 
             if (_originIndex.TryGetValue(route.Origin, out var originSet))
             {
@@ -121,6 +117,8 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
                 }
             }
         }
+
+        _logger.LogInformation($"{countToRemoved} routes was removed from cache"); 
 
         UpdateEarliestTimeLimit();
     }
@@ -161,11 +159,13 @@ public class RoutesCacheService : IRoutesCacheService, IDisposable
         if (disposing)
         {
             _routeCache.Clear();
-            _routeHashes.Clear();
+            _routeKeys.Clear();
             _originIndex.Clear();
         }
 
         _disposed = true;
     }
+
+    public long GetEarliestTimeLimitTicks() => Interlocked.Read(ref _earliestTimeLimitTicks);
 }
 
