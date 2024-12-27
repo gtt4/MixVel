@@ -38,15 +38,14 @@ namespace MixVel.Cache
 
         private TimeSpan ComputeDelay()
         {
-            var now = DateTime.UtcNow;
-            var earliestTimeLimit = _cache.EarliestTimeLimit;
+            var now = DateTime.UtcNow.Ticks;
+            var earliestTimeLimit = _cache.EarliestTimeLimitTicks;
 
             var delay = earliestTimeLimit <= now
-                ? TimeSpan.FromSeconds(_defaultDelayMax * 2) 
-                : earliestTimeLimit - now;
+                ? TimeSpan.FromSeconds(_defaultDelayMax * 2)
+                : TimeSpan.FromTicks(earliestTimeLimit - now);
 
             return TimeSpan.FromSeconds(Math.Clamp(delay.TotalSeconds, _defaultDelayMin, _defaultDelayMax));
-
         }
 
         private void InvalidateIfNecessary()

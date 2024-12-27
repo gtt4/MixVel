@@ -12,8 +12,13 @@ public class RoutesCacheService : IRoutesCacheService
     private readonly IMetricsService _metricsService;
     private readonly ReaderWriterLockSlim _readerLockSlim = new ReaderWriterLockSlim();
 
-    public DateTime EarliestTimeLimit { get; set; } = DateTime.MaxValue;
+    public long _earliestTimeLimitTicks;
 
+    public long EarliestTimeLimitTicks
+    {
+        get { return _earliestTimeLimitTicks; }
+        set { _earliestTimeLimitTicks = value; }
+    }
 
     public RoutesCacheService(ILogger<RoutesCacheService> logger, IMetricsService metricsService)
     {
@@ -27,7 +32,7 @@ public class RoutesCacheService : IRoutesCacheService
         var now = DateTime.UtcNow; // TODO Clarify requirments. Assume timelimit is in UTC
 
         var groupedRoutes = routes
-            .Where(route => route.TimeLimit > now) 
+            .Where(route => route.TimeLimit > now)
             .GroupBy(route => route.Origin);
 
         foreach (var group in groupedRoutes)
@@ -39,7 +44,7 @@ public class RoutesCacheService : IRoutesCacheService
             {
                 _routeCache[route.Id] = route;
                 originSet[route.Id] = 0;
-                UpdateEarliestTimeLimit(route.TimeLimit); 
+                UpdateEarliestTimeLimit(route.TimeLimit);
             }
         }
     }
@@ -56,7 +61,7 @@ public class RoutesCacheService : IRoutesCacheService
             return Enumerable.Empty<Route>();
         }
         _metricsService.IncrementCounter("cache_hits", new[] { request.Origin });
- 
+
 
         var routes = originSet.Keys
               .Select(id => _routeCache.TryGetValue(id, out var route) ? route : null)
@@ -73,10 +78,11 @@ public class RoutesCacheService : IRoutesCacheService
         var now = DateTime.UtcNow;
         var expiredRouteIds = new List<Guid>();
 
-        if (now < EarliestTimeLimit)
+        var nowTicks = DateTime.UtcNow.Ticks;
+        if (nowTicks < _earliestTimeLimitTicks)
         {
             return;
-        };
+        }
 
         foreach (var kvp in _routeCache)
         {
@@ -109,28 +115,25 @@ public class RoutesCacheService : IRoutesCacheService
 
     private void UpdateEarliestTimeLimit(DateTime newTimeLimit)
     {
-        lock (_earliestTimeLimitLock)
+        var newTicks = newTimeLimit.Ticks;
+        long oldTicks;
+        do
         {
-            if (newTimeLimit < EarliestTimeLimit)
-            {
-                EarliestTimeLimit = newTimeLimit;
-            }
-        }
+            oldTicks = _earliestTimeLimitTicks;
+            if (newTicks >= oldTicks) break;
+        } while (Interlocked.CompareExchange(ref _earliestTimeLimitTicks, newTicks, oldTicks) != oldTicks);
     }
 
     private void UpdateEarliestTimeLimit()
     {
-        lock (_earliestTimeLimitLock)
+        if (_routeCache.IsEmpty)
         {
-            if (_routeCache.IsEmpty)
-            {
-                EarliestTimeLimit = DateTime.MaxValue;
-            }
-            else
-            {
-                EarliestTimeLimit = _routeCache.Values.Min(route => route.TimeLimit);
-            }
+            Interlocked.Exchange(ref _earliestTimeLimitTicks, DateTime.MaxValue.Ticks);
+            return;
         }
+
+        var minTimeLimitTicks = _routeCache.Values.Min(route => route.TimeLimit.Ticks);
+        UpdateEarliestTimeLimit(new DateTime(minTimeLimitTicks));
     }
 }
 
