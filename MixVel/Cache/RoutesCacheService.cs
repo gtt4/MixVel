@@ -5,7 +5,7 @@ using Route = MixVel.Interfaces.Route;
 public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposable
 {
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
-    private readonly ConcurrentDictionary<string, Guid> _routeKeys = new();
+    private readonly ConcurrentDictionary<int, Guid> _routeKeys = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
@@ -39,7 +39,12 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
 
                 if (!_routeKeys.TryAdd(routeKey, route.Id))
                 {
-                    // Route already exists, skip adding
+                    if (_routeKeys.TryGetValue(routeKey, out var existingRouteId) && !existingRouteId.Equals(route.Id))
+                    {
+                        _logger.LogWarning($"Potential conflict: Route {routeKey} differs but has the same hash.");
+                        // Additional handling logic for conflicting routes
+                    }
+
                     _logger.LogInformation($"Duplicate route {routeKey} was not added");
                     continue;
                 }
@@ -51,9 +56,9 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
         }
     }
 
-    private string GetRouteKey(Route route)
+    private int GetRouteKey(Route route)
     {
-        return $"{route.Origin}_{route.Destination}_{route.TimeLimit}"; // TODO 
+        return route.GetHashCode();
     }
 
     public IEnumerable<Route> Get(SearchRequest request)

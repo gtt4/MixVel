@@ -96,5 +96,34 @@
         // Mandatory
         // Timelimit. After it expires, route became not actual
         public DateTime TimeLimit { get; set; }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Route other)
+            {
+                return Id == other.Id &&
+                       string.Equals(Origin, other.Origin, StringComparison.OrdinalIgnoreCase) &&
+                       string.Equals(Destination, other.Destination, StringComparison.OrdinalIgnoreCase) &&
+                       OriginDateTime == other.OriginDateTime &&
+                       DestinationDateTime == other.DestinationDateTime &&
+                       Price == other.Price &&
+                       TimeLimit == other.TimeLimit;
+            }
+
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                Id,
+                Origin?.ToLowerInvariant(),
+                Destination?.ToLowerInvariant(),
+                OriginDateTime,
+                DestinationDateTime,
+                Price,
+                TimeLimit
+            );
+        }
     }
 }
