@@ -1,5 +1,6 @@
 ﻿using MixVel.Interfaces;
 using System.Collections.Concurrent;
+using System.Reflection.Metadata.Ecma335;
 using Route = MixVel.Interfaces.Route;
 
 public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposable
@@ -7,11 +8,14 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
     private readonly ConcurrentDictionary<Guid, Route> _routeCache = new();
     private readonly ConcurrentDictionary<int, Guid> _routeKeys = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _originIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<long, List<Guid>> _buckets = new();
+    private readonly long _bucketRangeTicks = TimeSpan.TicksPerMinute; 
     private readonly ILogger<RoutesCacheService> _logger;
     private readonly SearchFilter _searchFilter;
     private readonly IMetricsService _metricsService;
     private bool _disposed = false;
     private long _earliestTimeLimitTicks;
+    private int _isInvalidating;
 
     public RoutesCacheService(ILogger<RoutesCacheService> logger, IMetricsService metricsService)
     {
@@ -48,7 +52,8 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
                     _logger.LogInformation($"Duplicate route {routeKey} was not added");
                     continue;
                 }
-                route.Id = Guid.NewGuid();  
+                route.Id = Guid.NewGuid(); // watch out
+                AddToBucket(route);
                 _routeCache[route.Id] = route;
                 originSet[route.Id] = 0;
                 UpdateEarliestTimeLimit(route.TimeLimit);
@@ -92,47 +97,100 @@ public class RoutesCacheService : IRoutesCacheService, IPeriodicTask, IDisposabl
         Invalidate();
     }
 
-    public void Invalidate() 
+    public void Invalidate()
     {
-        var now = DateTime.UtcNow;
-
-        if (now.Ticks < Interlocked.Read(ref _earliestTimeLimitTicks)) return;
-            
-        var expiredRouteIds = new List<Guid>();
-        
-        foreach (var kvp in _routeCache) 
+        if (Interlocked.Exchange(ref _isInvalidating, 1) == 1)
         {
-            var route = kvp.Value;
-            if (route.TimeLimit <= now)
-            {
-                expiredRouteIds.Add(route.Id);
-            }
+            // Another thread is already running Invalidate; skip execution
+            return;
         }
-        int countToRemoved = 0;
-        foreach (var routeId in expiredRouteIds)
-        {
-            if (!_routeCache.TryRemove(routeId, out var route))
-            {
-                continue;
-            }
-            countToRemoved++;
-            var routeKey = GetRouteKey(route);
-            _routeKeys.TryRemove(routeKey, out _);
 
-            if (_originIndex.TryGetValue(route.Origin, out var originSet))
+        try
+        {
+            var now = DateTime.UtcNow;
+
+            if (now.Ticks < Interlocked.Read(ref _earliestTimeLimitTicks)) return;
+
+            var expiredRouteIds = GetExpiredRoutes(now);
+
+            int countToRemoved = 0;
+            foreach (var routeId in expiredRouteIds)
             {
-                originSet.TryRemove(routeId, out _);
-                if (originSet.IsEmpty)
+                if (TryRemoveRoute(routeId))
+                    countToRemoved++;
+            }
+
+            _logger.LogInformation($"{countToRemoved} routes were removed from cache");
+
+            UpdateEarliestTimeLimit();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isInvalidating, 0);
+        }
+    }
+
+    private List<Guid> GetExpiredRoutes(DateTime now)
+    {
+        var expiredRouteIds = new List<Guid>();
+
+        foreach (var bucketKey in _buckets.Keys.ToList())
+        {
+            if (bucketKey + _bucketRangeTicks <= now.Ticks) // Bucket is fully expired
+            {
+                _logger.LogDebug($"Bucket {(new DateTime(bucketKey)).TimeOfDay} is fully expired");
+
+                if (_buckets.TryRemove(bucketKey, out var bucket))
                 {
-                    _originIndex.TryRemove(route.Origin, out _);
+                    lock (bucket)
+                    {
+                        foreach (var routeId in bucket)
+                        {
+                            expiredRouteIds.Add(routeId);
+                        }
+                        _logger.LogDebug($"{bucket.Count} routes to remove");
+                    }
                 }
             }
         }
 
-        _logger.LogInformation($"{countToRemoved} routes was removed from cache"); 
-
-        UpdateEarliestTimeLimit();
+        return expiredRouteIds;
     }
+
+    private void AddToBucket(Route route)
+    {
+        var bucketStartTicks = route.TimeLimit.Ticks / _bucketRangeTicks * _bucketRangeTicks; // Align to bucket
+        var bucket = _buckets.GetOrAdd(bucketStartTicks, _ => new List<Guid>(100));
+
+        lock (bucket)
+        {
+            bucket.Add(route.Id); // Add the route to the appropriate bucket
+        }
+    }
+
+    private bool TryRemoveRoute(Guid routeId)
+    {
+        if (!_routeCache.TryRemove(routeId, out var route))
+        {
+            return false;
+        }
+
+        var routeKey = GetRouteKey(route);
+        _routeKeys.TryRemove(routeKey, out _);
+
+        if (_originIndex.TryGetValue(route.Origin, out var originSet))
+        {
+            originSet.TryRemove(routeId, out _);
+            if (originSet.IsEmpty)
+            {
+                _originIndex.TryRemove(route.Origin, out _);
+            }
+        }
+
+        return true;
+    }
+
+    
 
     private void UpdateEarliestTimeLimit(DateTime newTimeLimit)
     {
