@@ -54,7 +54,7 @@ public class MockClient
 
                     var jsonResponse = JsonSerializer.Serialize(responseObject, _serializerOptions);
 
-                    await Task.Delay(rand.Next(1,3000));
+                    //await Task.Delay(rand.Next(1,3000));
                     return new HttpResponseMessage
                     {
                         StatusCode = System.Net.HttpStatusCode.OK,
@@ -70,7 +70,7 @@ public class ResponseGenerator
 
     public ResponseGenerator()
     {
-        _rand = new Random();
+        _rand = Random.Shared;
     }
 
     public ProviderOneSearchResponse GenerateResponse(ProviderOneSearchRequest request)

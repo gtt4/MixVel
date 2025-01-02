@@ -4,10 +4,10 @@
     {
         void Add(IEnumerable<Route> routes);
         IEnumerable<Route> Get(SearchRequest request);
-        void Invalidate();
+        void Invalidate(CancellationToken cancellationToken, bool force);
     }
 
-    public interface IPeriodicTask
+    public interface IScheduledJob
     {
         void Execute(CancellationToken cancellationToken);
         long GetEarliestTimeLimitTicks();

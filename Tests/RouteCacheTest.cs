@@ -1,122 +1,140 @@
 ﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MixVel.Cache;
 using MixVel.Interfaces;
 using Moq;
 
-namespace Tests
+namespace Tests;
+
+public class RouteCacheTest
 {
-    public class RouteCacheTest
+    private RoutesCacheService _cacheService;
+
+    [SetUp]
+    public void Setup()
     {
-        [Test]
-        public void Add_ShouldCacheRoutes_WhenRoutesAreValid()
+        var loggerFactoryMock = new Mock<ILoggerFactory>();
+        var loggerMock = new Mock<ILogger>();
+
+        loggerFactoryMock
+            .Setup(factory => factory.CreateLogger(It.IsAny<string>()))
+            .Returns(loggerMock.Object);
+        var mockMetricsService = new Mock<IMetricsService>();
+
+        var cacheSettings = new CacheSettings
         {
-            // Arrange
-            var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var metricsMock = Mock.Of<IMetricsService>();
+            TimeBucketRangeInMin = 1,
+            MinRoutesToInvalidate = 1
+        };
 
-            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
-            var route = new Route
-            {
-                Origin = "A",
-                Destination = "B",
-                TimeLimit = DateTime.UtcNow.AddMinutes(30)
-            };
+        var optionsMock = new Mock<IOptions<CacheSettings>>();
+        optionsMock.Setup(o => o.Value).Returns(cacheSettings);
+        _cacheService = new RoutesCacheService(loggerFactoryMock.Object, mockMetricsService.Object, optionsMock.Object);
+    }
 
-            // Act
-            cacheService.Add(new[] { route });
+    [TearDown]
+    public void TearDown()
+    {
+        _cacheService.Dispose();
+    }
 
-            // Assert
-            var cachedRoutes = cacheService.Get(new SearchRequest { Origin = "A" }).ToList();
-            foreach (var cachedRoute in cachedRoutes)
-            {
-                Assert.IsTrue(Guid.Empty != cachedRoute.Id);
-            }
-            Assert.Contains(route, cachedRoutes);
+
+    [Test]
+    public void Add_ShouldCacheRoutes_WhenRoutesAreValid()
+    {
+        // Arrange
+
+        var route = new Route
+        {
+            Origin = "A",
+            Destination = "B",
+            TimeLimit = DateTime.UtcNow.AddMinutes(30)
+        };
+
+        // Act
+        _cacheService.Add(new[] { route });
+
+        // Assert
+        var cachedRoutes = _cacheService.Get(new SearchRequest { Origin = "A" }).ToList();
+        foreach (var cachedRoute in cachedRoutes)
+        {
+            Assert.IsTrue(Guid.Empty != cachedRoute.Id);
         }
+        Assert.Contains(route, cachedRoutes);
+    }
 
-        [Test]
-        public void Invalidate_ShouldRemoveExpiredRoutes()
+    [Test]
+    public void Invalidate_ShouldRemoveExpiredRoutes()
+    {
+        // Arrange
+
+        var expiredRoute = new Route
         {
-            // Arrange
-            var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var metricsMock = Mock.Of<IMetricsService>();
+            Id = Guid.NewGuid(),
+            Origin = "A",
+            Destination = "B",
+            TimeLimit = DateTime.UtcNow.AddMinutes(-1)
+        };
+        _cacheService.Add(new[] { expiredRoute });
 
-            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
-            var expiredRoute = new Route
-            {
-                Id = Guid.NewGuid(),
-                Origin = "A",
-                Destination = "B",
-                TimeLimit = DateTime.UtcNow.AddMinutes(-1)
-            };
-            cacheService.Add(new[] { expiredRoute });
+        // Act
+        _cacheService.Invalidate(new CancellationToken());
 
-            // Act
-            cacheService.Invalidate();
+        // Assert
+        var cachedRoutes = _cacheService.Get(new SearchRequest { Origin = "A" });
 
-            // Assert
-            var cachedRoutes = cacheService.Get(new SearchRequest { Origin = "A" });
+        Assert.IsEmpty(cachedRoutes);
+    }
 
-            Assert.IsEmpty(cachedRoutes);
-        }
+    [Test]
+    public void Invalidate_ShouldFilterOutExpiredRoutes()
+    {
+        // Arrange
 
-        [Test]
-        public void Invalidate_ShouldFilterOutExpiredRoutes()
+        var expiredRoute = new Route
         {
-            // Arrange
-            var loggerMock = Mock.Of<ILogger<RoutesCacheService>>();
-            var metricsMock = Mock.Of<IMetricsService>();
+            Id = Guid.NewGuid(),
+            Origin = "A",
+            Destination = "B",
+            TimeLimit = DateTime.UtcNow.AddMinutes(-1)
+        };
+        _cacheService.Add(new[] { expiredRoute });
 
-            var cacheService = new RoutesCacheService(loggerMock, metricsMock);
-            var expiredRoute = new Route
-            {
-                Id = Guid.NewGuid(),
-                Origin = "A",
-                Destination = "B",
-                TimeLimit = DateTime.UtcNow.AddMinutes(-1)
-            };
-            cacheService.Add(new[] { expiredRoute });
+        // Act
+        // Invalidation not yet happend
 
-            // Act
-            // Invalidation not yet happend
+        // Assert
+        var cachedRoutes = _cacheService.Get(new SearchRequest { Origin = "A" });
 
-            // Assert
-            var cachedRoutes = cacheService.Get(new SearchRequest { Origin = "A" });
+        Assert.IsEmpty(cachedRoutes);
+    }
+    [Test]
+    public void Add_ShouldNotAddDuplicateRoutesToCache()
+    {
+        // Arrange
+        var now = DateTime.UtcNow;
 
-            Assert.IsEmpty(cachedRoutes);
-        }
-        [Test]
-        public void Add_ShouldNotAddDuplicateRoutesToCache()
-        {
-            // Arrange
-            var mockLogger = new Mock<ILogger<RoutesCacheService>>();
-            var mockMetricsService = new Mock<IMetricsService>();
-            var service = new RoutesCacheService(mockLogger.Object, mockMetricsService.Object);
-
-            var now = DateTime.UtcNow;
-
-            var routes = new List<Route>
+        var routes = new List<Route>
         {
             new Route { Id = Guid.NewGuid(), Origin = "A", Destination = "B", TimeLimit = now.AddHours(1) },
             new Route { Id = Guid.NewGuid(), Origin = "A", Destination = "B", TimeLimit = now.AddHours(1) }, // Duplicate
             new Route { Id = Guid.NewGuid(), Origin = "C", Destination = "D", TimeLimit = now.AddHours(2) }
         };
 
-            // Act
-            service.Add(routes);
+        // Act
+        _cacheService.Add(routes);
 
-            // Assert
-            var result = service.Get(new SearchRequest { Origin = "A" }).ToList();
+        // Assert
+        var result = _cacheService.Get(new SearchRequest { Origin = "A" }).ToList();
 
-            Assert.That(result, Has.Count.EqualTo(1)); // Only one route from "A" to "B" should exist
-            Assert.That(result, Has.Exactly(1).Matches<Route>(r =>
-                r.Origin == "A" && r.Destination == "B" && r.TimeLimit == now.AddHours(1)));
+        Assert.That(result, Has.Count.EqualTo(1)); // Only one route from "A" to "B" should exist
+        Assert.That(result, Has.Exactly(1).Matches<Route>(r =>
+            r.Origin == "A" && r.Destination == "B" && r.TimeLimit == now.AddHours(1)));
 
-            var allRoutes = service.Get(new SearchRequest { Origin = "C" }).ToList();
-            Assert.That(allRoutes, Has.Count.EqualTo(1)); // Verify other routes are unaffected
-            Assert.That(allRoutes, Has.Exactly(1).Matches<Route>(r =>
-                r.Origin == "C" && r.Destination == "D" && r.TimeLimit == now.AddHours(2)));
-        }
-
-
+        var allRoutes = _cacheService.Get(new SearchRequest { Origin = "C" }).ToList();
+        Assert.That(allRoutes, Has.Count.EqualTo(1)); // Verify other routes are unaffected
+        Assert.That(allRoutes, Has.Exactly(1).Matches<Route>(r =>
+            r.Origin == "C" && r.Destination == "D" && r.TimeLimit == now.AddHours(2)));
     }
 }
+

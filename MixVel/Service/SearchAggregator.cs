@@ -7,9 +7,7 @@ namespace MixVel.Service
     {
         public SearchResponse Aggregate(IEnumerable<Route> routes)
         {
-            var routeList = routes.ToList();
-
-            if (!routeList.Any())
+            if (!routes.Any())
             {
                 return new SearchResponse
                 {
@@ -21,14 +19,23 @@ namespace MixVel.Service
                 };
             }
 
-            var minPrice = routeList.Min(r => r.Price);
-            var maxPrice = routeList.Max(r => r.Price);
-            var minDuration = routeList.Min(r => (r.DestinationDateTime - r.OriginDateTime).TotalMinutes);
-            var maxDuration = routeList.Max(r => (r.DestinationDateTime - r.OriginDateTime).TotalMinutes);
+            decimal minPrice = decimal.MaxValue, maxPrice = decimal.MinValue;
+            double minDuration = double.MaxValue, maxDuration = double.MinValue;
+
+            foreach (var route in routes)
+            {
+                var price = route.Price;
+                var duration = (route.DestinationDateTime - route.OriginDateTime).TotalMinutes;
+
+                if (price < minPrice) minPrice = price;
+                if (price > maxPrice) maxPrice = price;
+                if (duration < minDuration) minDuration = duration;
+                if (duration > maxDuration) maxDuration = duration;
+            }
 
             return new SearchResponse
             {
-                Routes = routeList.ToArray(),
+                Routes = routes.ToArray(),
                 MinPrice = minPrice,
                 MaxPrice = maxPrice,
                 MinMinutesRoute = (int)minDuration,

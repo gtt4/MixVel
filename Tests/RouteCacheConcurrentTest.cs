@@ -1,154 +1,162 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using MixVel.Cache;
+using MixVel.Interfaces;
+using Moq;
 
-namespace Tests
+namespace Tests;
+
+
+[TestFixture]
+public class RoutesCacheServiceConcurrentTests
 {
-    using Microsoft.Extensions.Logging;
-    using MixVel.Interfaces;
-    using Moq;
-    using NUnit.Framework;
-    using System;
-    using System.Collections.Concurrent;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Threading;
-    using System.Threading.Tasks;
+    private RoutesCacheService _cacheService;
+    private List<Route> _testRoutes;
 
-    [TestFixture]
-    public class RoutesCacheServiceConcurrentTests
+    [SetUp]
+    public void Setup()
     {
-        private RoutesCacheService _cacheService;
-        private List<Route> _testRoutes;
+        var loggerFactoryMock = new Mock<ILoggerFactory>();
+        var loggerMock = new Mock<ILogger>();
 
-        [SetUp]
-        public void Setup()
+        // Setup the factory to return the mock logger for any type
+        loggerFactoryMock
+            .Setup(factory => factory.CreateLogger(It.IsAny<string>()))
+            .Returns(loggerMock.Object);
+        var metrics = new Mock<IMetricsService>().Object;
+
+
+        var cacheSettings = new CacheSettings
         {
-            var logger = new Mock<ILogger<RoutesCacheService>>().Object;
-            var metrics = new Mock<IMetricsService>().Object;
-            _cacheService = new RoutesCacheService(logger, metrics);
+            TimeBucketRangeInMin = 1,
+            MinRoutesToInvalidate = 1,
+            InvalidationDelayMinInSeconds = 1,
+            InvalidationDelayMaxInSeconds = 2
+        };
 
-            _testRoutes = new List<Route>
+        var optionsMock = new Mock<IOptions<CacheSettings>>();
+        optionsMock.Setup(o => o.Value).Returns(cacheSettings);
+        _cacheService = new RoutesCacheService(loggerFactoryMock.Object, metrics, optionsMock.Object);
+
+        _testRoutes = new List<Route>
         {
             new Route
             {
                 Id = Guid.NewGuid(),
                 Origin = "A",
                 Destination = "B",
-                TimeLimit = DateTime.UtcNow.AddMinutes(10)
+                TimeLimit = DateTime.UtcNow.AddSeconds(2)
             },
             new Route
             {
                 Id = Guid.NewGuid(),
                 Origin = "A",
                 Destination = "C",
-                TimeLimit = DateTime.UtcNow.AddMinutes(15)
+                TimeLimit = DateTime.UtcNow.AddSeconds(2)
             },
             new Route
             {
                 Id = Guid.NewGuid(),
                 Origin = "D",
                 Destination = "E",
-                TimeLimit = DateTime.UtcNow.AddMinutes(20)
+                TimeLimit = DateTime.UtcNow.AddSeconds(2)
             }
         };
-        }
+    }
 
-        [TearDown]
-        public void TearDown() 
+    [TearDown]
+    public void TearDown()
+    {
+        _cacheService.Dispose();
+    }
+
+    [Test]
+    public void RoutesCacheService_HandlesConcurrentAccessCorrectly()
+    {
+        var cancellationTokenSource = new CancellationTokenSource();
+        var tasks = new List<Task>();
+
+        tasks.Add(Task.Run(() =>
         {
-            _cacheService.Dispose();
-        }
-
-        [Test]
-        public void RoutesCacheService_HandlesConcurrentAccessCorrectly()
-        {
-            var cancellationTokenSource = new CancellationTokenSource();
-            var tasks = new List<Task>();
-
-            tasks.Add(Task.Run(() =>
+            foreach (var route in _testRoutes)
             {
-                foreach (var route in _testRoutes)
-                {
-                    _cacheService.Add(new[] { route });
-                }
-            }));
-
-            Task.WaitAll(tasks.ToArray());
-
-            for (int i = 0; i < 10; i++)
-            {
-                tasks.Add(Task.Run(() =>
-                {
-                    for (int j = 0; j < 50; j++)
-                    {
-                        var request = new SearchRequest
-                        {
-                            Origin = "A",
-                            Filters = null
-                        };
-                        var routes = _cacheService.Get(request);
-                        Assert.That(routes, Is.Not.Null);
-                        Assert.That(routes.Any(route => route.Origin == "A"), Is.True);
-                    }
-                }));
+                _cacheService.Add(new[] { route });
             }
+        }));
 
-            // Simulate invalidate operations concurrently
+        Task.WaitAll(tasks.ToArray());
+
+        for (int i = 0; i < 10; i++)
+        {
             tasks.Add(Task.Run(() =>
             {
-                Thread.Sleep(10); 
-                _cacheService.Invalidate();
-            }));
-
-            Task.WaitAll(tasks.ToArray());
-
-            var allRoutes = _cacheService.Get(new SearchRequest { Origin = "A" });
-            //Assert.That(allRoutes, Is.Empty); // Expired routes should be removed
-        }
-
-        [Test]
-        public void RoutesCacheService_ReadsWhileWriting()
-        {
-            var writeTask = Task.Run(() =>
-            {
-                for (int i = 0; i < 100; i++)
-                {
-                    var newRoute = new Route
-                    {
-                        Id = Guid.NewGuid(),
-                        Origin = "X",
-                        Destination = "Y",
-                        TimeLimit = DateTime.UtcNow.AddMinutes(10)
-                    };
-                    _cacheService.Add(new[] { newRoute });
-                    Thread.Sleep(10); // Simulate staggered writes
-                }
-            });
-
-            var readTask = Task.Run(() =>
-            {
-                for (int i = 0; i < 100; i++)
+                for (int j = 0; j < 50; j++)
                 {
                     var request = new SearchRequest
                     {
-                        Origin = "X",
+                        Origin = "A",
                         Filters = null
                     };
                     var routes = _cacheService.Get(request);
                     Assert.That(routes, Is.Not.Null);
-                    Thread.Sleep(5); // Simulate staggered reads
+                    Assert.That(routes.Any(route => route.Origin == "A"), Is.True);
                 }
-            });
-
-            Task.WaitAll(writeTask, readTask);
-
-            // Ensure no exceptions occurred and data integrity is maintained
-            var finalRoutes = _cacheService.Get(new SearchRequest { Origin = "X" });
-            Assert.That(finalRoutes.Count(), Is.GreaterThanOrEqualTo(1));
+            }));
         }
+
+        // Simulate invalidate operations concurrently
+        tasks.Add(Task.Run(() =>
+        {
+            Thread.Sleep(3000);
+            _cacheService.Invalidate(new CancellationToken(), force: true);
+        }));
+
+        Task.WaitAll(tasks.ToArray());
+
+        var allRoutes = _cacheService.Get(new SearchRequest { Origin = "A" });
+        Assert.That(allRoutes, Is.Empty); // Expired routes should be removed
     }
 
+    [Test]
+    public void RoutesCacheService_ReadsWhileWriting()
+    {
+        var writeTask = Task.Run(() =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                var newRoute = new Route
+                {
+                    Id = Guid.NewGuid(),
+                    Origin = "X",
+                    Destination = "Y",
+                    TimeLimit = DateTime.UtcNow.AddMinutes(10)
+                };
+                _cacheService.Add(new[] { newRoute });
+                Thread.Sleep(10); // Simulate staggered writes
+            }
+        });
+
+        var readTask = Task.Run(() =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                var request = new SearchRequest
+                {
+                    Origin = "X",
+                    Filters = null
+                };
+                var routes = _cacheService.Get(request);
+                Assert.That(routes, Is.Not.Null);
+                Thread.Sleep(5); // Simulate staggered reads
+            }
+        });
+
+        Task.WaitAll(writeTask, readTask);
+
+        // Ensure no exceptions occurred and data integrity is maintained
+        var finalRoutes = _cacheService.Get(new SearchRequest { Origin = "X" });
+        Assert.That(finalRoutes.Count(), Is.GreaterThanOrEqualTo(1));
+    }
 }
+
+

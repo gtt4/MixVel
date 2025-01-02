@@ -14,7 +14,7 @@ namespace MixVel.Service
         public static IServiceCollection AddCustomServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddSingleton<IRoutesCacheService, RoutesCacheService>();
-            services.AddSingleton<IPeriodicTask>(provider => (IPeriodicTask)provider.GetRequiredService<IRoutesCacheService>());
+            services.AddSingleton<IScheduledJob>(provider => (IScheduledJob)provider.GetRequiredService<IRoutesCacheService>());
             services.AddSingleton<InvalidationScheduler>();
 
             services.AddSingleton<ISearchService>(provider =>
@@ -36,7 +36,7 @@ namespace MixVel.Service
 
         private static HttpClient CreateHttpClient(IServiceProvider provider)
         {
-            var useMockClients = false; // TODO: Replace with configuration or environment setting
+            var useMockClients = true; // TODO: Replace with configuration or environment setting
             return useMockClients
                 ? new MockClient().CreateMockClient(provider.GetRequiredService<IProviderUriResolver>())
                 : new HttpClient();
